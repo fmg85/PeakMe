@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -33,12 +33,12 @@ async def list_datasets(
 
 @router.post("/api/datasets/upload", response_model=DatasetOut, status_code=status.HTTP_201_CREATED)
 async def upload_dataset(
+    current_user: CurrentUser,
     project_id: uuid.UUID = Form(...),
     name: str = Form(...),
     description: str | None = Form(default=None),
     sample_type: str | None = Form(default=None),
-    file: UploadFile = ...,
-    current_user: CurrentUser,
+    file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(Project).where(Project.id == project_id))
