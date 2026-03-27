@@ -1,0 +1,76 @@
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import apiClient from '../lib/apiClient'
+import type { IonQueueItem } from '../lib/types'
+
+const BATCH_SIZE = 20
+const PREFETCH_AHEAD = 5
+
+interface UseAnnotationQueueOptions {
+  datasetId: string
+  strategy?: 'unannotated_first' | 'starred_first' | 'all'
+}
+
+export function useAnnotationQueue({ datasetId, strategy = 'unannotated_first' }: UseAnnotationQueueOptions) {
+  const [queue, setQueue] = useState<IonQueueItem[]>([])
+  const [offset, setOffset] = useState(0)
+  const [exhausted, setExhausted] = useState(false)
+  const prefetchingRef = useRef(false)
+
+  const fetchBatch = useCallback(async (batchOffset: number): Promise<IonQueueItem[]> => {
+    const { data } = await apiClient.get<IonQueueItem[]>(
+      `/api/datasets/${datasetId}/ions/queue`,
+      { params: { limit: BATCH_SIZE, strategy, offset: batchOffset } }
+    )
+    return data
+  }, [datasetId, strategy])
+
+  // Initial load
+  useEffect(() => {
+    setQueue([])
+    setOffset(0)
+    setExhausted(false)
+    fetchBatch(0).then((items) => {
+      setQueue(items)
+      setOffset(items.length)
+      if (items.length < BATCH_SIZE) setExhausted(true)
+      // Prefetch images for first batch
+      items.forEach((item) => prefetchImage(item.image_url))
+    })
+  }, [datasetId, strategy])
+
+  // Prefetch next batch when queue gets low
+  useEffect(() => {
+    if (queue.length <= PREFETCH_AHEAD && !exhausted && !prefetchingRef.current) {
+      prefetchingRef.current = true
+      fetchBatch(offset).then((items) => {
+        setQueue((prev) => [...prev, ...items])
+        setOffset((prev) => prev + items.length)
+        if (items.length < BATCH_SIZE) setExhausted(true)
+        items.forEach((item) => prefetchImage(item.image_url))
+        prefetchingRef.current = false
+      })
+    }
+  }, [queue.length, exhausted, offset, fetchBatch])
+
+  const current = queue[0] ?? null
+  const remaining = queue.length
+
+  const advance = useCallback(() => {
+    setQueue((prev) => prev.slice(1))
+  }, [])
+
+  const updateCurrent = useCallback((updater: (item: IonQueueItem) => IonQueueItem) => {
+    setQueue((prev) => {
+      if (prev.length === 0) return prev
+      return [updater(prev[0]), ...prev.slice(1)]
+    })
+  }, [])
+
+  return { current, remaining, advance, updateCurrent, exhausted }
+}
+
+function prefetchImage(url: string) {
+  const img = new Image()
+  img.src = url
+}

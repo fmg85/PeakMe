@@ -1,0 +1,25 @@
+version: "3.9"
+
+# Production overrides — apply on top of docker-compose.yml:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+services:
+  api:
+    command: >
+      gunicorn app.main:app
+      -k uvicorn.workers.UvicornWorker
+      -w 4
+      -b 0.0.0.0:8000
+      --timeout 120
+      --access-logfile -
+    volumes: []  # no hot-reload volume in prod
+    restart: always
+
+  nginx:
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    restart: always
