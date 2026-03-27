@@ -52,8 +52,8 @@ option_list <- list(
     help = "Colormap: viridis, magma, plasma, inferno, cividis [default: viridis]"
   ),
   make_option(c("--normalize"),
-    type = "character", default = "tic",
-    help = "Intensity normalization: tic, rms, none [default: tic]"
+    type = "character", default = "rms",
+    help = "Intensity normalization: tic, rms, none [default: rms]"
   ),
   make_option(c("--zip"),
     action = "store_true", default = FALSE,
@@ -109,7 +109,7 @@ if (ext == "imzml") {
   stop("Unsupported file type: ", ext, ". Use .imzML or .RData", call. = FALSE)
 }
 
-message("  Loaded: ", nrow(msi), " pixels, ", nfeatures(msi), " m/z features")
+message("  Loaded: ", ncol(msi), " pixels, ", length(mz(msi)), " m/z features")
 
 # ---------------------------------------------------------------------------
 # Normalization
@@ -133,8 +133,15 @@ cmap_fn <- switch(args$colormap,
 colors <- cmap_fn(256)
 
 # ---------------------------------------------------------------------------
-# Create output directory
+# Create output directory (clean any previous run first)
 # ---------------------------------------------------------------------------
+if (dir.exists(args$output)) {
+  old_files <- list.files(args$output, pattern = "\\.png$|\\.csv$", full.names = TRUE)
+  if (length(old_files) > 0) {
+    message("  Cleaning ", length(old_files), " files from previous run in ", args$output, "/")
+    file.remove(old_files)
+  }
+}
 dir.create(args$output, recursive = TRUE, showWarnings = FALSE)
 
 # ---------------------------------------------------------------------------
