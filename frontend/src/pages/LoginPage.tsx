@@ -26,8 +26,7 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-gray-950 px-4">
       <div className="mb-8 text-center">
-        <h1 className="text-4xl font-bold tracking-tight text-white">PeakMe</h1>
-        <p className="mt-2 text-gray-400">MSI ion annotation platform</p>
+        <img src="/PeakMe_logo_orig.png" alt="PeakMe" className="mx-auto h-20 w-auto" />
       </div>
 
       <div className="w-full max-w-sm rounded-xl bg-gray-900 p-8 shadow-xl">
@@ -53,14 +52,14 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@lab.edu"
-                className="mt-1 w-full rounded-lg bg-gray-800 px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="mt-1 w-full rounded-lg bg-gray-800 px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-purple"
               />
             </div>
             {error && <p className="text-sm text-red-400">{error}</p>}
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-lg bg-indigo-600 px-4 py-2.5 font-semibold text-white hover:bg-indigo-500 disabled:opacity-50 transition-colors"
+              className="w-full rounded-lg bg-brand-orange px-4 py-2.5 font-semibold text-white hover:bg-brand-red disabled:opacity-50 transition-colors"
             >
               {loading ? 'Sending…' : 'Send magic link'}
             </button>

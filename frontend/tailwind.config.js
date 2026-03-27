@@ -3,6 +3,13 @@ export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {
+      colors: {
+        brand: {
+          red: '#D42B0E',
+          orange: '#F4812B',
+          purple: '#7C3AED',
+        },
+      },
       animation: {
         'slide-left': 'slideLeft 0.25s ease-out forwards',
         'slide-right': 'slideRight 0.25s ease-out forwards',
