@@ -49,6 +49,7 @@ async def create_label(
         name=body.name,
         color=body.color,
         keyboard_shortcut=body.keyboard_shortcut,
+        swipe_direction=body.swipe_direction,
         sort_order=body.sort_order,
     )
     db.add(label)
@@ -74,6 +75,8 @@ async def update_label(
         label.color = body.color
     if body.keyboard_shortcut is not None:
         label.keyboard_shortcut = body.keyboard_shortcut
+    if "swipe_direction" in body.model_fields_set:
+        label.swipe_direction = body.swipe_direction  # allows clearing with null
     if body.sort_order is not None:
         label.sort_order = body.sort_order
     db.add(label)

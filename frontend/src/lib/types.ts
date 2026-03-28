@@ -12,6 +12,7 @@ export interface LabelOption {
   name: string
   color: string | null
   keyboard_shortcut: string | null
+  swipe_direction: 'left' | 'right' | 'up' | 'down' | null
   sort_order: number
   created_at: string
 }

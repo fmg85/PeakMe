@@ -1,11 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { useDrag } from '@use-gesture/react'
 import apiClient from '../lib/apiClient'
 import { useAnnotationQueue } from '../hooks/useAnnotationQueue'
 import type { Dataset, LabelOption, Project } from '../lib/types'
 
-type AnimDirection = 'left' | 'right' | null
+type AnimDirection = 'left' | 'right' | 'up' | 'down' | null
+type SwipeDir = 'left' | 'right' | 'up' | 'down'
+
+const SWIPE_COMMIT = 90   // px — distance to commit an annotation
+const SWIPE_HINT  = 35   // px — distance to start showing the edge label
+
+/** Determine dominant swipe direction from a drag delta */
+function getDragDir(x: number, y: number): SwipeDir | null {
+  const ax = Math.abs(x), ay = Math.abs(y)
+  if (Math.max(ax, ay) < SWIPE_HINT) return null
+  return ax > ay ? (x > 0 ? 'right' : 'left') : (y > 0 ? 'down' : 'up')
+}
 
 export default function AnnotatePage() {
   const { projectId } = useParams<{ projectId: string }>()
@@ -16,6 +28,10 @@ export default function AnnotatePage() {
   const [zoomed, setZoomed] = useState(false)
   const [strategy, setStrategy] = useState<'unannotated_first' | 'starred_first' | 'all'>('unannotated_first')
   const lastAnnotationRef = useRef<{ ionId: string; labelId: string } | null>(null)
+
+  // Drag state for swipe gesture
+  const [dragXY, setDragXY] = useState<[number, number]>([0, 0])
+  const isDragging = dragXY[0] !== 0 || dragXY[1] !== 0
 
   const { data: project } = useQuery<Project>({
     queryKey: ['project', projectId],
@@ -33,29 +49,23 @@ export default function AnnotatePage() {
     strategy,
   })
 
+  // Build swipe direction → label map
+  const swipeMap = (project?.label_options ?? []).reduce<Partial<Record<SwipeDir, LabelOption>>>(
+    (acc, l) => { if (l.swipe_direction) acc[l.swipe_direction] = l; return acc },
+    {}
+  )
+
   const annotate = useCallback(async (label: LabelOption, direction: AnimDirection = 'right') => {
     if (!current) return
-
     lastAnnotationRef.current = { ionId: current.id, labelId: label.id }
-
-    // Optimistic: start animation immediately
     setAnim(direction)
-
     try {
-      await apiClient.post(`/api/ions/${current.id}/annotate`, {
-        label_option_id: label.id,
-      })
+      await apiClient.post(`/api/ions/${current.id}/annotate`, { label_option_id: label.id })
     } catch {
-      // On error, stay on current ion
       setAnim(null)
       return
     }
-
-    // Advance after animation (250ms)
-    setTimeout(() => {
-      advance()
-      setAnim(null)
-    }, 250)
+    setTimeout(() => { advance(); setAnim(null) }, 250)
   }, [current, advance])
 
   const toggleStar = useCallback(async () => {
@@ -71,6 +81,25 @@ export default function AnnotatePage() {
     await apiClient.delete(`/api/ions/${last.ionId}/annotate`)
     forceReload()
   }, [forceReload])
+
+  // Swipe gesture
+  const bind = useDrag(({ down, movement: [mx, my], velocity: [vx, vy], cancel }) => {
+    if (!current) return
+    if (zoomed) { if (down) cancel(); return }
+
+    if (down) {
+      setDragXY([mx, my])
+    } else {
+      setDragXY([0, 0])
+      const dir = getDragDir(mx, my)
+      const dist = Math.sqrt(mx * mx + my * my)
+      const speed = Math.sqrt(vx * vx + vy * vy)
+      const label = dir ? swipeMap[dir] : null
+      if (label && (dist >= SWIPE_COMMIT || speed > 0.6)) {
+        annotate(label, dir)
+      }
+    }
+  }, { filterTaps: true, pointer: { touch: true } })
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -89,6 +118,27 @@ export default function AnnotatePage() {
   const annotated = (dataset?.total_ions ?? 0) - remaining
   const progress = dataset ? Math.round((annotated / dataset.total_ions) * 100) : 0
 
+  // Derived drag values
+  const [dx, dy] = dragXY
+  const dragDir = getDragDir(dx, dy)
+  const dragDist = Math.sqrt(dx * dx + dy * dy)
+  const committed = dragDist >= SWIPE_COMMIT
+
+  const cardStyle: React.CSSProperties = {
+    transform: isDragging
+      ? `translate(${dx}px, ${dy}px) rotate(${dx * 0.06}deg)`
+      : anim === 'left'  ? 'translateX(-120%) rotate(-20deg)'
+      : anim === 'right' ? 'translateX(120%) rotate(20deg)'
+      : anim === 'up'    ? 'translateY(-120%) rotate(-10deg)'
+      : anim === 'down'  ? 'translateY(120%) rotate(10deg)'
+      : 'translate(0,0) rotate(0deg)',
+    transition: isDragging ? 'none' : 'transform 0.3s cubic-bezier(.25,.8,.25,1)',
+    touchAction: 'none',
+    userSelect: 'none',
+    cursor: isDragging ? 'grabbing' : 'grab',
+    willChange: 'transform',
+  }
+
   if (!datasetId) {
     return (
       <div className="flex h-screen items-center justify-center text-gray-400">
@@ -98,9 +148,9 @@ export default function AnnotatePage() {
   }
 
   return (
-    <div className="flex h-screen flex-col bg-gray-950 select-none">
+    <div className="flex h-screen flex-col bg-gray-950 select-none overflow-hidden">
       {/* Header */}
-      <header className="flex items-center justify-between border-b border-gray-800 bg-gray-900 px-4 py-3">
+      <header className="flex items-center justify-between border-b border-gray-800 bg-gray-900 px-4 py-3 flex-shrink-0">
         <Link to={`/projects/${projectId}`} className="text-sm text-gray-400 hover:text-white">
           ← {project?.name ?? 'Project'}
         </Link>
@@ -118,15 +168,12 @@ export default function AnnotatePage() {
       </header>
 
       {/* Progress bar */}
-      <div className="h-1 bg-gray-800">
-        <div
-          className="h-1 bg-brand-orange transition-all duration-500"
-          style={{ width: `${progress}%` }}
-        />
+      <div className="h-1 bg-gray-800 flex-shrink-0">
+        <div className="h-1 bg-brand-orange transition-all duration-500" style={{ width: `${progress}%` }} />
       </div>
 
       {/* Main content */}
-      <div className="flex flex-1 flex-col items-center justify-center px-4 py-6 overflow-hidden">
+      <div className="flex flex-1 flex-col items-center justify-center px-4 py-4 overflow-hidden">
         {exhausted && !current ? (
           <div className="text-center space-y-4 max-w-sm">
             <div className="text-5xl">🎉</div>
@@ -163,45 +210,55 @@ export default function AnnotatePage() {
           </div>
         ) : current ? (
           <>
-            {/* m/z value */}
-            <p className="mb-3 text-sm text-gray-400 font-mono">
+            {/* m/z label */}
+            <p className="mb-3 text-sm text-gray-400 font-mono flex-shrink-0">
               m/z = <span className="text-white font-semibold">{current.mz_value.toFixed(4)}</span>
               {current.annotation && (
                 <span className="ml-3 text-indigo-400">← previously: {current.annotation.label_name}</span>
               )}
             </p>
 
-            {/* Ion image card */}
-            <div
-              className={`relative rounded-xl overflow-hidden shadow-2xl transition-all
-                ${anim === 'left' ? 'animate-slide-left' : anim === 'right' ? 'animate-slide-right' : 'animate-fade-in'}
-                ${zoomed ? 'cursor-zoom-out' : 'cursor-zoom-in'}
-              `}
-              style={{ width: 'min(55vmin, 90vw)', aspectRatio: '1 / 1' }}
-              onClick={() => setZoomed((z) => !z)}
-            >
-              <img
-                src={current.image_url}
-                alt={`Ion m/z ${current.mz_value}`}
-                className={`w-full block transition-transform duration-200 ${zoomed ? 'scale-150' : 'scale-100'}`}
-                style={{ imageRendering: 'pixelated' }}
-              />
+            {/* Swipe arena — card + edge labels */}
+            <div className="relative flex items-center justify-center" style={{ width: 'min(55vmin, 90vw)', height: 'min(55vmin, 90vw)' }}>
 
-              {/* Star badge */}
-              {current.is_starred && (
-                <div className="absolute top-2 right-2 text-yellow-400 text-lg drop-shadow">★</div>
-              )}
+              {/* Edge labels — shown while dragging */}
+              <SwipeEdge dir="left"  label={swipeMap.left}  active={dragDir === 'left'}  committed={committed && dragDir === 'left'}  opacity={(dragDir === 'left'  && isDragging) ? Math.min(1, (dragDist - SWIPE_HINT) / (SWIPE_COMMIT - SWIPE_HINT)) : 0} />
+              <SwipeEdge dir="right" label={swipeMap.right} active={dragDir === 'right'} committed={committed && dragDir === 'right'} opacity={(dragDir === 'right' && isDragging) ? Math.min(1, (dragDist - SWIPE_HINT) / (SWIPE_COMMIT - SWIPE_HINT)) : 0} />
+              <SwipeEdge dir="up"    label={swipeMap.up}    active={dragDir === 'up'}    committed={committed && dragDir === 'up'}    opacity={(dragDir === 'up'    && isDragging) ? Math.min(1, (dragDist - SWIPE_HINT) / (SWIPE_COMMIT - SWIPE_HINT)) : 0} />
+              <SwipeEdge dir="down"  label={swipeMap.down}  active={dragDir === 'down'}  committed={committed && dragDir === 'down'}  opacity={(dragDir === 'down'  && isDragging) ? Math.min(1, (dragDist - SWIPE_HINT) / (SWIPE_COMMIT - SWIPE_HINT)) : 0} />
+
+              {/* Ion image card */}
+              <div
+                {...bind()}
+                className="absolute inset-0 rounded-xl overflow-hidden shadow-2xl"
+                style={cardStyle}
+                onClick={() => { if (!isDragging) setZoomed((z) => !z) }}
+              >
+                <img
+                  src={current.image_url}
+                  alt={`Ion m/z ${current.mz_value}`}
+                  className={`w-full h-full block transition-transform duration-200 ${zoomed ? 'scale-150' : 'scale-100'}`}
+                  style={{ imageRendering: 'pixelated' }}
+                  draggable={false}
+                />
+                {current.is_starred && (
+                  <div className="absolute top-2 right-2 text-yellow-400 text-lg drop-shadow">★</div>
+                )}
+              </div>
             </div>
 
             {/* Label buttons */}
-            <div className="mt-6 flex flex-wrap justify-center gap-2 max-w-lg">
+            <div className="mt-5 flex flex-wrap justify-center gap-2 max-w-lg flex-shrink-0">
               {project?.label_options.map((label, i) => (
                 <button
                   key={label.id}
                   onClick={() => annotate(label, i < (project.label_options.length / 2) ? 'left' : 'right')}
-                  className="flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white shadow-lg hover:brightness-110 active:scale-95 transition-all"
+                  className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold text-white shadow-lg hover:brightness-110 active:scale-95 transition-all"
                   style={{ backgroundColor: label.color || '#6366f1' }}
                 >
+                  {label.swipe_direction && (
+                    <span className="text-xs opacity-70">{dirArrow(label.swipe_direction)}</span>
+                  )}
                   {label.keyboard_shortcut && (
                     <kbd className="rounded bg-black/20 px-1 py-0.5 text-xs">{label.keyboard_shortcut}</kbd>
                   )}
@@ -211,7 +268,7 @@ export default function AnnotatePage() {
             </div>
 
             {/* Star + Undo */}
-            <div className="mt-4 flex items-center gap-4">
+            <div className="mt-3 flex items-center gap-4 flex-shrink-0">
               <button
                 onClick={toggleStar}
                 className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition-colors
@@ -235,15 +292,57 @@ export default function AnnotatePage() {
               </button>
             </div>
 
-            {/* Keyboard hint */}
-            <p className="mt-4 text-xs text-gray-600">
-              Press label key to annotate · S to star · Z to undo
-            </p>
+            {/* Swipe hint — only if any swipe labels configured */}
+            {Object.keys(swipeMap).length > 0 && !isDragging && (
+              <p className="mt-2 text-xs text-gray-600 flex-shrink-0">
+                Swipe to annotate · S to star · Z to undo
+              </p>
+            )}
+            {Object.keys(swipeMap).length === 0 && (
+              <p className="mt-2 text-xs text-gray-600 flex-shrink-0">
+                Press label key to annotate · S to star · Z to undo
+              </p>
+            )}
           </>
         ) : (
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
         )}
       </div>
+    </div>
+  )
+}
+
+// ─── helpers ────────────────────────────────────────────────────────────────
+
+function dirArrow(dir: string) {
+  return { left: '←', right: '→', up: '↑', down: '↓' }[dir] ?? ''
+}
+
+interface SwipeEdgeProps {
+  dir: SwipeDir
+  label: LabelOption | undefined
+  active: boolean
+  committed: boolean
+  opacity: number
+}
+
+function SwipeEdge({ dir, label, opacity }: SwipeEdgeProps) {
+  if (!label || opacity <= 0) return null
+
+  const posStyle: React.CSSProperties = {
+    left:  { position: 'absolute', left: 0, top: '50%', transform: 'translate(-50%, -50%)' },
+    right: { position: 'absolute', right: 0, top: '50%', transform: 'translate(50%, -50%)' },
+    up:    { position: 'absolute', top: 0, left: '50%', transform: 'translate(-50%, -50%)' },
+    down:  { position: 'absolute', bottom: 0, left: '50%', transform: 'translate(-50%, 50%)' },
+  }[dir]
+
+  return (
+    <div
+      className="flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-bold text-white shadow-2xl pointer-events-none z-10"
+      style={{ ...posStyle, backgroundColor: label.color || '#6366f1', opacity }}
+    >
+      <span>{dirArrow(dir)}</span>
+      <span>{label.name}</span>
     </div>
   )
 }

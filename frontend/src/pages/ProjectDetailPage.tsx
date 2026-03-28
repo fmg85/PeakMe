@@ -9,6 +9,43 @@ const LABEL_COLORS = [
   '#f97316', '#eab308', '#22c55e', '#14b8a6', '#3b82f6',
 ]
 
+type SwipeDir = 'left' | 'right' | 'up' | 'down'
+const SWIPE_DIRS: SwipeDir[] = ['left', 'right', 'up', 'down']
+const DIR_ARROW: Record<SwipeDir, string> = { left: '←', right: '→', up: '↑', down: '↓' }
+
+/** Mini 4-direction compass picker */
+function DirectionPicker({
+  value,
+  onChange,
+  usedDirs,
+}: {
+  value: SwipeDir | null
+  onChange: (d: SwipeDir | null) => void
+  usedDirs: SwipeDir[]
+}) {
+  return (
+    <div className="flex items-center gap-1" title="Assign swipe direction (optional)">
+      {SWIPE_DIRS.map((d) => {
+        const isMine = value === d
+        const blocked = !isMine && usedDirs.includes(d)
+        return (
+          <button
+            key={d}
+            type="button"
+            disabled={blocked}
+            onClick={() => onChange(isMine ? null : d)}
+            className={`w-7 h-7 rounded text-sm font-bold transition-all
+              ${isMine ? 'bg-brand-orange text-white ring-2 ring-white' : blocked ? 'bg-gray-800 text-gray-600 cursor-not-allowed' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+            title={blocked ? `Already used by another label` : `Swipe ${d}`}
+          >
+            {DIR_ARROW[d]}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 export default function ProjectDetailPage() {
   const { projectId } = useParams<{ projectId: string }>()
   const queryClient = useQueryClient()
@@ -17,6 +54,7 @@ export default function ProjectDetailPage() {
   const [newLabel, setNewLabel] = useState('')
   const [newLabelColor, setNewLabelColor] = useState(LABEL_COLORS[0])
   const [newShortcut, setNewShortcut] = useState('')
+  const [newSwipeDir, setNewSwipeDir] = useState<SwipeDir | null>(null)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [datasetName, setDatasetName] = useState('')
@@ -30,24 +68,29 @@ export default function ProjectDetailPage() {
 
   const { data: datasets } = useQuery<Dataset[]>({
     queryKey: ['datasets', projectId],
-    queryFn: () =>
-      apiClient.get(`/api/projects/${projectId}/datasets`).then((r) => r.data),
+    queryFn: () => apiClient.get(`/api/projects/${projectId}/datasets`).then((r) => r.data),
     enabled: !!projectId,
   })
 
   const addLabel = useMutation({
-    mutationFn: (body: { name: string; color: string; keyboard_shortcut?: string }) =>
+    mutationFn: (body: { name: string; color: string; keyboard_shortcut?: string; swipe_direction?: SwipeDir }) =>
       apiClient.post(`/api/projects/${projectId}/labels`, body).then((r) => r.data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['project', projectId] })
       setNewLabel('')
       setNewShortcut('')
+      setNewSwipeDir(null)
     },
   })
 
+  const updateLabel = useMutation({
+    mutationFn: ({ id, ...body }: { id: string; swipe_direction: SwipeDir | null }) =>
+      apiClient.patch(`/api/labels/${id}`, body).then((r) => r.data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['project', projectId] }),
+  })
+
   const deleteLabel = useMutation({
-    mutationFn: (labelId: string) =>
-      apiClient.delete(`/api/labels/${labelId}`),
+    mutationFn: (labelId: string) => apiClient.delete(`/api/labels/${labelId}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['project', projectId] }),
   })
 
@@ -63,9 +106,7 @@ export default function ProjectDetailPage() {
     if (sampleType) form.append('sample_type', sampleType)
     form.append('file', file)
     try {
-      await apiClient.post('/api/datasets/upload', form, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
+      await apiClient.post('/api/datasets/upload', form, { headers: { 'Content-Type': 'multipart/form-data' } })
       queryClient.invalidateQueries({ queryKey: ['datasets', projectId] })
       setDatasetName('')
       setDatasetDesc('')
@@ -78,22 +119,25 @@ export default function ProjectDetailPage() {
     }
   }
 
-  const handleExport = (format: 'csv' | 'json', datasetId?: string, datasetName?: string) => {
-    const url = datasetId
-      ? `/api/projects/${projectId}/datasets/${datasetId}/annotations`
+  const handleExport = (format: 'csv' | 'json', dsId?: string, dsName?: string) => {
+    const url = dsId
+      ? `/api/projects/${projectId}/datasets/${dsId}/annotations`
       : `/api/projects/${projectId}/annotations`
-    const safeName = (datasetName ?? project?.name ?? projectId)!.replace(/\s+/g, '_')
-    apiClient
-      .get(url, { params: { format }, responseType: 'blob' })
-      .then((r) => {
-        const blobUrl = URL.createObjectURL(r.data)
-        const a = document.createElement('a')
-        a.href = blobUrl
-        a.download = `peakme_${safeName}_annotations.${format}`
-        a.click()
-        URL.revokeObjectURL(blobUrl)
-      })
+    const safeName = (dsName ?? project?.name ?? projectId)!.replace(/\s+/g, '_')
+    apiClient.get(url, { params: { format }, responseType: 'blob' }).then((r) => {
+      const blobUrl = URL.createObjectURL(r.data)
+      const a = document.createElement('a')
+      a.href = blobUrl
+      a.download = `peakme_${safeName}_annotations.${format}`
+      a.click()
+      URL.revokeObjectURL(blobUrl)
+    })
   }
+
+  // Which directions are already claimed by existing labels (for the "new label" picker)
+  const usedDirs = (project?.label_options ?? [])
+    .map((l) => l.swipe_direction)
+    .filter(Boolean) as SwipeDir[]
 
   if (isLoading) {
     return <div className="flex h-screen items-center justify-center text-gray-500">Loading…</div>
@@ -111,10 +155,7 @@ export default function ProjectDetailPage() {
           >
             Export CSV
           </button>
-          <Link
-            to={`/projects/${projectId}/stats`}
-            className="text-sm text-gray-400 hover:text-white transition-colors"
-          >
+          <Link to={`/projects/${projectId}/stats`} className="text-sm text-gray-400 hover:text-white transition-colors">
             Stats
           </Link>
         </div>
@@ -220,28 +261,41 @@ export default function ProjectDetailPage() {
         {/* Labels */}
         <section>
           <h2 className="mb-4 text-lg font-semibold text-white">Labels</h2>
+
           <div className="space-y-2">
-            {project?.label_options.map((label) => (
-              <div key={label.id} className="flex items-center gap-3 rounded-lg bg-gray-900 px-4 py-3">
-                <span
-                  className="h-4 w-4 rounded-full flex-shrink-0"
-                  style={{ backgroundColor: label.color || '#6366f1' }}
-                />
-                <span className="flex-1 text-white">{label.name}</span>
-                {label.keyboard_shortcut && (
-                  <kbd className="rounded bg-gray-700 px-1.5 py-0.5 text-xs text-gray-300">
-                    {label.keyboard_shortcut}
-                  </kbd>
-                )}
-                <button
-                  onClick={() => deleteLabel.mutate(label.id)}
-                  className="text-gray-600 hover:text-red-400 transition-colors text-sm"
-                  title="Delete label"
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
+            {project?.label_options.map((label) => {
+              // Directions available for THIS label's picker (blocked = used by others)
+              const otherDirs = (project.label_options ?? [])
+                .filter((l) => l.id !== label.id)
+                .map((l) => l.swipe_direction)
+                .filter(Boolean) as SwipeDir[]
+              return (
+                <div key={label.id} className="flex items-center gap-3 rounded-lg bg-gray-900 px-4 py-3">
+                  <span
+                    className="h-4 w-4 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: label.color || '#6366f1' }}
+                  />
+                  <span className="flex-1 text-white">{label.name}</span>
+                  {label.keyboard_shortcut && (
+                    <kbd className="rounded bg-gray-700 px-1.5 py-0.5 text-xs text-gray-300">
+                      {label.keyboard_shortcut}
+                    </kbd>
+                  )}
+                  <DirectionPicker
+                    value={label.swipe_direction}
+                    usedDirs={otherDirs}
+                    onChange={(d) => updateLabel.mutate({ id: label.id, swipe_direction: d })}
+                  />
+                  <button
+                    onClick={() => deleteLabel.mutate(label.id)}
+                    className="text-gray-600 hover:text-red-400 transition-colors text-sm"
+                    title="Delete label"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )
+            })}
           </div>
 
           {/* Add label */}
@@ -251,7 +305,7 @@ export default function ProjectDetailPage() {
               onChange={(e) => setNewLabel(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && newLabel.trim()) {
-                  addLabel.mutate({ name: newLabel.trim(), color: newLabelColor, keyboard_shortcut: newShortcut || undefined })
+                  addLabel.mutate({ name: newLabel.trim(), color: newLabelColor, keyboard_shortcut: newShortcut || undefined, swipe_direction: newSwipeDir || undefined })
                 }
               }}
               placeholder="Label name"
@@ -263,6 +317,11 @@ export default function ProjectDetailPage() {
               placeholder="Key"
               maxLength={1}
               className="w-14 rounded-lg bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <DirectionPicker
+              value={newSwipeDir}
+              usedDirs={usedDirs}
+              onChange={setNewSwipeDir}
             />
             <div className="flex gap-1.5">
               {LABEL_COLORS.map((c) => (
@@ -277,7 +336,7 @@ export default function ProjectDetailPage() {
             <button
               onClick={() => {
                 if (newLabel.trim()) {
-                  addLabel.mutate({ name: newLabel.trim(), color: newLabelColor, keyboard_shortcut: newShortcut || undefined })
+                  addLabel.mutate({ name: newLabel.trim(), color: newLabelColor, keyboard_shortcut: newShortcut || undefined, swipe_direction: newSwipeDir || undefined })
                 }
               }}
               disabled={!newLabel.trim() || addLabel.isPending}
@@ -286,6 +345,9 @@ export default function ProjectDetailPage() {
               Add
             </button>
           </div>
+          <p className="mt-2 text-xs text-gray-600">
+            ← → ↑ ↓ assign swipe directions · grayed out = already used
+          </p>
         </section>
       </main>
     </div>
