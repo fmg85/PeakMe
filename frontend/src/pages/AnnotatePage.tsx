@@ -14,6 +14,7 @@ export default function AnnotatePage() {
 
   const [anim, setAnim] = useState<AnimDirection>(null)
   const [zoomed, setZoomed] = useState(false)
+  const [strategy, setStrategy] = useState<'unannotated_first' | 'starred_first' | 'all'>('unannotated_first')
   const lastAnnotationRef = useRef<{ ionId: string; labelId: string } | null>(null)
 
   const { data: project } = useQuery<Project>({
@@ -29,7 +30,7 @@ export default function AnnotatePage() {
 
   const { current, remaining, advance, updateCurrent, exhausted } = useAnnotationQueue({
     datasetId,
-    strategy: 'unannotated_first',
+    strategy,
   })
 
   const annotate = useCallback(async (label: LabelOption, direction: AnimDirection = 'right') => {
@@ -128,16 +129,38 @@ export default function AnnotatePage() {
       {/* Main content */}
       <div className="flex flex-1 flex-col items-center justify-center px-4 py-6 overflow-hidden">
         {exhausted && !current ? (
-          <div className="text-center space-y-4">
+          <div className="text-center space-y-4 max-w-sm">
             <div className="text-5xl">🎉</div>
-            <h2 className="text-xl font-semibold text-white">All done!</h2>
-            <p className="text-gray-400">You've annotated all ions in this dataset.</p>
-            <Link
-              to={`/projects/${projectId}/stats`}
-              className="inline-block rounded-lg bg-indigo-600 px-6 py-2.5 font-medium text-white hover:bg-indigo-500 transition-colors"
-            >
-              View stats
-            </Link>
+            <h2 className="text-xl font-semibold text-white">
+              {strategy === 'unannotated_first' ? 'All done!' : strategy === 'starred_first' ? 'No starred ions' : 'End of dataset'}
+            </h2>
+            <p className="text-gray-400">
+              {strategy === 'unannotated_first'
+                ? `You've annotated all ${dataset?.total_ions} ions in this dataset.`
+                : strategy === 'starred_first'
+                ? 'No starred ions found.'
+                : 'You reached the end of the dataset.'}
+            </p>
+            <div className="flex flex-col gap-2 items-center">
+              <button
+                onClick={() => setStrategy('all')}
+                className="w-48 rounded-lg bg-gray-800 px-4 py-2.5 text-sm font-medium text-white hover:bg-gray-700 transition-colors"
+              >
+                Review all ions
+              </button>
+              <button
+                onClick={() => setStrategy('starred_first')}
+                className="w-48 rounded-lg bg-gray-800 px-4 py-2.5 text-sm font-medium text-yellow-400 hover:bg-gray-700 transition-colors"
+              >
+                ★ Review starred
+              </button>
+              <Link
+                to={`/projects/${projectId}`}
+                className="w-48 rounded-lg bg-brand-orange px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-red transition-colors text-center"
+              >
+                Back to project
+              </Link>
+            </div>
           </div>
         ) : current ? (
           <>

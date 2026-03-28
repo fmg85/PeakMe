@@ -1,12 +1,14 @@
 import uuid
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.deps import CurrentUser
+from app.models.annotation import Annotation
 from app.models.dataset import Dataset
+from app.models.ion import Ion
 from app.models.project import Project
 from app.schemas.dataset import DatasetOut
 from app.services.ingest import IngestError, ingest_zip
@@ -23,12 +25,29 @@ async def list_datasets(
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
+    ds_result = await db.execute(
         select(Dataset)
         .where(Dataset.project_id == project_id)
         .order_by(Dataset.created_at.desc())
     )
-    return result.scalars().all()
+    datasets = ds_result.scalars().all()
+    if not datasets:
+        return []
+
+    # Annotation count per dataset for current user (single batch query)
+    dataset_ids = [d.id for d in datasets]
+    count_result = await db.execute(
+        select(Ion.dataset_id, func.count(Annotation.id).label("cnt"))
+        .join(Annotation, Annotation.ion_id == Ion.id)
+        .where(Ion.dataset_id.in_(dataset_ids), Annotation.user_id == current_user.id)
+        .group_by(Ion.dataset_id)
+    )
+    counts = {row.dataset_id: row.cnt for row in count_result}
+
+    return [
+        DatasetOut.model_validate(d).model_copy(update={"my_annotation_count": counts.get(d.id, 0)})
+        for d in datasets
+    ]
 
 
 @router.post("/api/datasets/upload", response_model=DatasetOut, status_code=status.HTTP_201_CREATED)

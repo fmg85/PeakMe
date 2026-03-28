@@ -32,6 +32,7 @@ export interface Dataset {
   description: string | null
   sample_type: string | null
   total_ions: number
+  my_annotation_count: number
   status: 'pending' | 'ready' | 'error'
   error_msg: string | null
   created_at: string

@@ -103,30 +103,51 @@ export default function ProjectDetailPage() {
         <section>
           <h2 className="mb-4 text-lg font-semibold text-white">Datasets</h2>
           <div className="space-y-3">
-            {datasets?.map((ds) => (
-              <div key={ds.id} className="rounded-xl bg-gray-900 p-4 flex items-center justify-between">
-                <div>
-                  <p className="font-medium text-white">{ds.name}</p>
-                  <p className="text-sm text-gray-400">
-                    {ds.total_ions.toLocaleString()} ions
-                    {ds.sample_type && ` · ${ds.sample_type}`}
-                    {' · '}
-                    <span className={ds.status === 'ready' ? 'text-green-400' : ds.status === 'error' ? 'text-red-400' : 'text-yellow-400'}>
-                      {ds.status}
-                    </span>
-                  </p>
-                  {ds.error_msg && <p className="text-xs text-red-400 mt-1">{ds.error_msg}</p>}
+            {datasets?.map((ds) => {
+              const pct = ds.total_ions > 0 ? Math.round((ds.my_annotation_count / ds.total_ions) * 100) : 0
+              const done = ds.my_annotation_count >= ds.total_ions && ds.total_ions > 0
+              return (
+                <div key={ds.id} className="rounded-xl bg-gray-900 p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <p className="font-medium text-white">{ds.name}</p>
+                      <p className="text-sm text-gray-400">
+                        {ds.total_ions.toLocaleString()} ions
+                        {ds.sample_type && ` · ${ds.sample_type}`}
+                        {ds.status !== 'ready' && (
+                          <span className={` · ${ds.status === 'error' ? 'text-red-400' : 'text-yellow-400'}`}>
+                            {ds.status}
+                          </span>
+                        )}
+                      </p>
+                      {ds.error_msg && <p className="text-xs text-red-400 mt-1">{ds.error_msg}</p>}
+                    </div>
+                    {ds.status === 'ready' && (
+                      <Link
+                        to={`/projects/${projectId}/annotate?dataset=${ds.id}`}
+                        className={`rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors ${done ? 'bg-gray-700 hover:bg-gray-600' : 'bg-brand-orange hover:bg-brand-red'}`}
+                      >
+                        {done ? 'Review' : 'Annotate'}
+                      </Link>
+                    )}
+                  </div>
+                  {ds.status === 'ready' && (
+                    <div className="mt-2">
+                      <div className="flex justify-between text-xs text-gray-500 mb-1">
+                        <span>Your annotations</span>
+                        <span>{ds.my_annotation_count} / {ds.total_ions} ({pct}%)</span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-gray-800">
+                        <div
+                          className="h-1.5 rounded-full bg-brand-orange transition-all duration-500"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
-                {ds.status === 'ready' && (
-                  <Link
-                    to={`/projects/${projectId}/annotate?dataset=${ds.id}`}
-                    className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 transition-colors"
-                  >
-                    Annotate
-                  </Link>
-                )}
-              </div>
-            ))}
+              )
+            })}
           </div>
 
           {/* Upload new dataset */}
