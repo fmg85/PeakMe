@@ -1,4 +1,3 @@
-#!/usr/bin/env Rscript
 # =============================================================================
 # PeakMe: Cardinal MSI → PNG Export Script
 # =============================================================================
@@ -11,9 +10,12 @@
 #   BiocManager::install("Cardinal")
 #   install.packages(c("viridis", "optparse"))
 #
-# Usage:
+# ── RStudio / interactive use (Windows or Mac) ───────────────────────────────
+# 1. Edit the config block below (lines marked EDIT ME)
+# 2. Click Source (or press Ctrl+Shift+S / Cmd+Shift+S)
+#
+# ── Command-line use ─────────────────────────────────────────────────────────
 #   Rscript export_cardinal_pngs.R --input path/to/data.imzML --output ./peakme_export
-#   Rscript export_cardinal_pngs.R --input path/to/experiment.RData --output ./peakme_export
 #
 # See docs/r-export-workflow.md for full instructions.
 # =============================================================================
@@ -26,55 +28,72 @@ suppressPackageStartupMessages({
 })
 
 # ---------------------------------------------------------------------------
-# CLI argument parsing
+# Config — edit this block when running inside RStudio
+# (ignored when called from the command line via Rscript)
 # ---------------------------------------------------------------------------
-option_list <- list(
-  make_option(c("-i", "--input"),
-    type = "character", default = NULL,
-    help = "Path to .imzML file or .RData file containing an MSImagingExperiment object",
-    metavar = "FILE"
-  ),
-  make_option(c("-o", "--output"),
-    type = "character", default = "./peakme_export",
-    help = "Output directory for PNGs and metadata.csv [default: ./peakme_export]",
-    metavar = "DIR"
-  ),
-  make_option(c("--width"),
-    type = "integer", default = 400,
-    help = "Image width in pixels [default: 400]"
-  ),
-  make_option(c("--height"),
-    type = "integer", default = 400,
-    help = "Image height in pixels [default: 400]"
-  ),
-  make_option(c("--colormap"),
-    type = "character", default = "viridis",
-    help = "Colormap: viridis, magma, plasma, inferno, cividis [default: viridis]"
-  ),
-  make_option(c("--normalize"),
-    type = "character", default = "rms",
-    help = "Intensity normalization: tic, rms, none [default: rms]"
-  ),
-  make_option(c("--zip"),
-    action = "store_true", default = FALSE,
-    help = "Zip the output directory after export (produces <output>.zip)"
-  ),
-  make_option(c("--object-name"),
-    type = "character", default = NULL,
-    help = "Name of the MSImagingExperiment object in .RData file (auto-detected if omitted)"
+if (interactive()) {
+  args <- list(
+    input        = "C:/path/to/your/data.imzML",  # EDIT ME — .imzML or .RData
+    output       = "./peakme_export",              # EDIT ME — output folder
+    width        = 400L,
+    height       = 400L,
+    colormap     = "viridis",   # viridis | magma | plasma | inferno | cividis
+    normalize    = "rms",       # rms | tic | none
+    zip          = TRUE,        # create a .zip ready for PeakMe upload?
+    `object-name` = NULL        # RData only: object name, or NULL to auto-detect
   )
-)
+} else {
+  # ---------------------------------------------------------------------------
+  # CLI argument parsing (Rscript / terminal use)
+  # ---------------------------------------------------------------------------
+  option_list <- list(
+    make_option(c("-i", "--input"),
+      type = "character", default = NULL,
+      help = "Path to .imzML file or .RData file containing an MSImagingExperiment object",
+      metavar = "FILE"
+    ),
+    make_option(c("-o", "--output"),
+      type = "character", default = "./peakme_export",
+      help = "Output directory for PNGs and metadata.csv [default: ./peakme_export]",
+      metavar = "DIR"
+    ),
+    make_option(c("--width"),
+      type = "integer", default = 400,
+      help = "Image width in pixels [default: 400]"
+    ),
+    make_option(c("--height"),
+      type = "integer", default = 400,
+      help = "Image height in pixels [default: 400]"
+    ),
+    make_option(c("--colormap"),
+      type = "character", default = "viridis",
+      help = "Colormap: viridis, magma, plasma, inferno, cividis [default: viridis]"
+    ),
+    make_option(c("--normalize"),
+      type = "character", default = "rms",
+      help = "Intensity normalization: tic, rms, none [default: rms]"
+    ),
+    make_option(c("--zip"),
+      action = "store_true", default = FALSE,
+      help = "Zip the output directory after export (produces <output>.zip)"
+    ),
+    make_option(c("--object-name"),
+      type = "character", default = NULL,
+      help = "Name of the MSImagingExperiment object in .RData file (auto-detected if omitted)"
+    )
+  )
 
-parser <- OptionParser(
-  usage = "%prog [options]",
-  option_list = option_list,
-  description = "Export Cardinal MSI data to PNGs for PeakMe annotation"
-)
-args <- parse_args(parser)
+  parser <- OptionParser(
+    usage = "%prog [options]",
+    option_list = option_list,
+    description = "Export Cardinal MSI data to PNGs for PeakMe annotation"
+  )
+  args <- parse_args(parser)
 
-if (is.null(args$input)) {
-  print_help(parser)
-  stop("--input is required", call. = FALSE)
+  if (is.null(args$input)) {
+    print_help(parser)
+    stop("--input is required", call. = FALSE)
+  }
 }
 
 # ---------------------------------------------------------------------------
