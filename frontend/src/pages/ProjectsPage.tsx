@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import apiClient from '../lib/apiClient'
 import { supabase } from '../lib/supabaseClient'
 import type { Project, User } from '../lib/types'
+import ChangelogModal from '../components/ChangelogModal'
 
 export default function ProjectsPage() {
   const queryClient = useQueryClient()
@@ -13,6 +14,7 @@ export default function ProjectsPage() {
 
   // Profile state
   const [showProfile, setShowProfile] = useState(false)
+  const [showChangelog, setShowChangelog] = useState(false)
   const [editingName, setEditingName] = useState('')
   const profileRef = useRef<HTMLDivElement>(null)
 
@@ -67,6 +69,7 @@ export default function ProjectsPage() {
 
   return (
     <div className="min-h-screen bg-gray-950">
+      {showChangelog && <ChangelogModal onClose={() => setShowChangelog(false)} />}
       <header className="border-b border-gray-800 bg-gray-900 px-6 py-4 flex items-center justify-between">
         <img src="/PeakMe_logo_orig.png" alt="PeakMe" className="h-12 w-auto" />
         <div className="flex items-center gap-4">
@@ -123,6 +126,12 @@ export default function ProjectsPage() {
                     Sign out
                   </button>
                 </div>
+                <button
+                  onClick={() => { setShowProfile(false); setShowChangelog(true) }}
+                  className="w-full rounded-lg bg-gray-800/50 px-3 py-1.5 text-sm text-gray-400 hover:text-white hover:bg-gray-800 transition-colors text-left"
+                >
+                  📋 What's new
+                </button>
               </div>
             )}
           </div>

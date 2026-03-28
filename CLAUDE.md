@@ -23,6 +23,13 @@ annotate each ion image by swiping or pressing keyboard shortcuts.
 
 - Always develop on `main` unless told otherwise
 
+## Self-correction rule
+
+If you notice you have made the **same documentation or process mistake more than once**
+(e.g. forgot to update `InstructionsPage.tsx` when the R script changed, forgot to add
+a CHANGELOG entry, forgot to update `docs/setup.md` after an auth change), **add a
+specific new rule to this file in the same commit** so it doesn't recur.
+
 ## Documentation maintenance — MANDATORY
 
 After every non-trivial change, ask yourself:
