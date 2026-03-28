@@ -29,3 +29,26 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# ── LargeMSIproc / R job data ─────────────────────────────────────────────────
+
+# Raw imzML input files (100+ GB, stored in S3)
+data/imzml/
+data/**/*.imzML
+data/**/*.ibd
+
+# Pipeline outputs and checkpoints (on EBS, backed up to S3)
+outputs/
+*.rds
+
+# Logs
+logs/
+
+# R session artifacts
+.Rproj.user/
+.Rhistory
+.RData
+
+# renv library (reproducible via renv.lock, not committed)
+renv/library/
+renv/staging/

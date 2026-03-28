@@ -1,0 +1,52 @@
+{
+  "_comment_setup": [
+    "1. Replace CHECKPOINT_BUCKET with your checkpoint S3 bucket name (e.g. largemsiproc-checkpoints)",
+    "2. Replace INPUT_BUCKET with your input data S3 bucket name (may be the same bucket)",
+    "3. Create an IAM role (e.g. spot-r-job-role) with this policy attached",
+    "4. Create an EC2 Instance Profile named 'spot-r-job-profile' wrapping that role:",
+    "     aws iam create-instance-profile --instance-profile-name spot-r-job-profile",
+    "     aws iam add-role-to-instance-profile --instance-profile-name spot-r-job-profile --role-name spot-r-job-role",
+    "5. Set IAM_PROFILE=spot-r-job-profile in your launch.sh environment"
+  ],
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "CheckpointBucketAccess",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "s3:ListBucket",
+        "s3:GetBucketLocation"
+      ],
+      "Resource": [
+        "arn:aws:s3:::CHECKPOINT_BUCKET",
+        "arn:aws:s3:::CHECKPOINT_BUCKET/*"
+      ]
+    },
+    {
+      "Sid": "InputDataReadAccess",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:ListBucket",
+        "s3:GetBucketLocation"
+      ],
+      "Resource": [
+        "arn:aws:s3:::INPUT_BUCKET",
+        "arn:aws:s3:::INPUT_BUCKET/*"
+      ]
+    },
+    {
+      "Sid": "EC2SelfAwareness",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:DescribeInstances",
+        "ec2:DescribeTags",
+        "ec2:DescribeVolumes"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
