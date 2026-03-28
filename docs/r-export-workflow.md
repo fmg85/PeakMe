@@ -23,48 +23,40 @@ if (!requireNamespace("BiocManager", quietly = TRUE))
   install.packages("BiocManager")
 
 BiocManager::install("Cardinal")
-install.packages(c("viridis", "optparse"))
+install.packages(c("viridis", "optparse", "png"))
 ```
 
 ---
 
 ## 2. Run the Export Script
 
-Download `r-scripts/export_cardinal_pngs.R` from this repository.
+Download `export_cardinal_pngs.R` from the PeakMe instructions page.
 
-### From an imzML file
+### Option A: RStudio (interactive)
+
+If your MSImagingExperiment is already loaded in your R session (raw, peak-picked, aligned — anything):
+
+1. Open `export_cardinal_pngs.R` in RStudio
+2. Edit the config block near the top:
+   ```r
+   msi_object = "msi"          # name of your variable — run ls() to check
+   output     = "./peakme_export"
+   ```
+3. Click **Source** (Ctrl+Shift+S on Windows · Cmd+Shift+S on Mac)
+
+### Option B: Command line — from a file
 
 ```bash
+# From an imzML file
 Rscript export_cardinal_pngs.R \
-  --input /path/to/your/data.imzML \
+  --file /path/to/your/data.imzML \
   --output ./peakme_export \
-  --colormap viridis \
-  --normalize tic \
+  --normalize rms \
   --zip
-```
 
-### From a saved .RData / .rda file
-
-If you have already loaded and processed your MSImagingExperiment in R and saved it:
-
-```r
-# In R: save your experiment
-save(msi_experiment, file = "my_experiment.RData")
-```
-
-```bash
+# From a saved .RData / .rda file
 Rscript export_cardinal_pngs.R \
-  --input my_experiment.RData \
-  --output ./peakme_export \
-  --zip
-```
-
-If the .RData contains multiple objects, specify which one:
-
-```bash
-Rscript export_cardinal_pngs.R \
-  --input my_experiment.RData \
-  --object-name msi_experiment \
+  --file my_experiment.RData \
   --output ./peakme_export \
   --zip
 ```
@@ -73,14 +65,11 @@ Rscript export_cardinal_pngs.R \
 
 | Option | Default | Description |
 |---|---|---|
-| `--input` | *(required)* | Path to `.imzML` or `.RData` file |
+| `--file` | *(required)* | Path to `.imzML` or `.RData` file |
 | `--output` | `./peakme_export` | Output directory |
-| `--width` | `400` | Image width in pixels |
-| `--height` | `400` | Image height in pixels |
 | `--colormap` | `viridis` | Color scale: `viridis`, `magma`, `plasma`, `inferno`, `cividis` |
-| `--normalize` | `tic` | Normalization: `tic`, `rms`, `none` |
+| `--normalize` | `rms` | Normalization: `tic`, `rms`, `none` |
 | `--zip` | off | Automatically zip the output folder |
-| `--object-name` | auto | Object name in `.RData` file |
 
 ---
 
@@ -104,8 +93,6 @@ filename,mz_value
 799.1201.png,799.1201
 ```
 
-You can create or edit this file manually if you have PNGs from a different source — just ensure each row maps a filename to its m/z value.
-
 ---
 
 ## 4. Upload to PeakMe
@@ -113,7 +100,11 @@ You can create or edit this file manually if you have PNGs from a different sour
 1. If you used `--zip`, a `peakme_export.zip` file was created automatically.
 2. If not, zip manually:
    ```bash
+   # macOS / Linux
    zip -r peakme_export.zip peakme_export/
+
+   # Windows (PowerShell)
+   Compress-Archive peakme_export peakme_export.zip
    ```
 3. Go to your PeakMe project → **New Dataset** → upload the ZIP file.
 
@@ -121,12 +112,11 @@ You can create or edit this file manually if you have PNGs from a different sour
 
 ## Tips
 
-- **Large datasets (>10,000 ions):** The export script prints progress every 100 ions. A 10,000-ion dataset typically takes 5–15 minutes depending on image size.
-- **Image resolution:** 400×400 px is the recommended default. Larger images (e.g., 800×800) produce nicer zoom quality but increase ZIP size and upload time.
+- **Progress / ETA:** The script prints rate and estimated time remaining every 100 ions.
 - **Colormap choice:** `viridis` is perceptually uniform and colorblind-friendly. `magma` shows high-intensity regions with bright yellow/white, which some scientists prefer for sparse signals. Use the same colormap within a project for consistent comparison.
-- **Normalization:** TIC (total ion current) normalization is standard for comparing ion distributions across a tissue section. Use `none` if you have already normalized in your Cardinal workflow.
-- **Subsetting:** You can export only a subset of m/z values by pre-filtering your MSImagingExperiment in R before running the script:
+- **Normalization:** RMS normalization works well for most peak-picked experiments. Use `none` if you have already normalized in your Cardinal workflow.
+- **Subsetting:** Export only a subset of m/z values by pre-filtering in R before running the script:
   ```r
   msi_subset <- msi[mz(msi) > 700 & mz(msi) < 900, ]
-  save(msi_subset, file = "subset_700_900.RData")
+  # then set msi_object = "msi_subset" in the config block
   ```
