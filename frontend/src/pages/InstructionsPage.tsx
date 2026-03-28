@@ -1,5 +1,4 @@
 import { Link } from 'react-router-dom'
-import apiClient from '../lib/apiClient'
 
 function CodeBlock({ children }: { children: string }) {
   return (
@@ -54,18 +53,11 @@ function OptionTable() {
 }
 
 export default function InstructionsPage() {
-  const handleDownloadScript = async () => {
-    try {
-      const response = await apiClient.get('/api/instructions/r-script', { responseType: 'blob' })
-      const url = URL.createObjectURL(new Blob([response.data], { type: 'text/plain' }))
-      const a = document.createElement('a')
-      a.href = url
-      a.download = 'export_cardinal_pngs.R'
-      a.click()
-      URL.revokeObjectURL(url)
-    } catch {
-      alert('Could not download the R script — please try again.')
-    }
+  const handleDownloadScript = () => {
+    const a = document.createElement('a')
+    a.href = '/export_cardinal_pngs.R'
+    a.download = 'export_cardinal_pngs.R'
+    a.click()
   }
 
   return (
