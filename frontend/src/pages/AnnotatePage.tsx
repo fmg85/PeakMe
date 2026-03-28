@@ -28,7 +28,7 @@ export default function AnnotatePage() {
     enabled: !!datasetId,
   })
 
-  const { current, remaining, advance, updateCurrent, exhausted } = useAnnotationQueue({
+  const { current, remaining, advance, updateCurrent, exhausted, forceReload } = useAnnotationQueue({
     datasetId,
     strategy,
   })
@@ -67,11 +67,10 @@ export default function AnnotatePage() {
   const undo = useCallback(async () => {
     const last = lastAnnotationRef.current
     if (!last) return
-    await apiClient.delete(`/api/ions/${last.ionId}/annotate`)
     lastAnnotationRef.current = null
-    // Reload queue from start to get the undone ion back
-    window.location.reload()
-  }, [])
+    await apiClient.delete(`/api/ions/${last.ionId}/annotate`)
+    forceReload()
+  }, [forceReload])
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -143,7 +142,7 @@ export default function AnnotatePage() {
             </p>
             <div className="flex flex-col gap-2 items-center">
               <button
-                onClick={() => setStrategy('all')}
+                onClick={() => { if (strategy === 'all') forceReload(); else setStrategy('all') }}
                 className="w-48 rounded-lg bg-gray-800 px-4 py-2.5 text-sm font-medium text-white hover:bg-gray-700 transition-colors"
               >
                 Review all ions

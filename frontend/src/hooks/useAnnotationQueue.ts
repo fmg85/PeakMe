@@ -14,9 +14,12 @@ export function useAnnotationQueue({ datasetId, strategy = 'unannotated_first' }
   const [queue, setQueue] = useState<IonQueueItem[]>([])
   const [offset, setOffset] = useState(0)
   const [exhausted, setExhausted] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
   const prefetchingRef = useRef(false)
   // Prevents prefetch effect from firing before the initial batch completes
   const initializedRef = useRef(false)
+
+  const forceReload = useCallback(() => setReloadKey((k) => k + 1), [])
 
   const fetchBatch = useCallback(async (batchOffset: number): Promise<IonQueueItem[]> => {
     const { data } = await apiClient.get<IonQueueItem[]>(
@@ -39,7 +42,7 @@ export function useAnnotationQueue({ datasetId, strategy = 'unannotated_first' }
       items.forEach((item) => prefetchImage(item.image_url))
       initializedRef.current = true
     })
-  }, [datasetId, strategy])
+  }, [datasetId, strategy, reloadKey])
 
   // Prefetch next batch when queue gets low
   useEffect(() => {
@@ -70,7 +73,7 @@ export function useAnnotationQueue({ datasetId, strategy = 'unannotated_first' }
     })
   }, [])
 
-  return { current, remaining, advance, updateCurrent, exhausted }
+  return { current, remaining, advance, updateCurrent, exhausted, forceReload }
 }
 
 function prefetchImage(url: string) {

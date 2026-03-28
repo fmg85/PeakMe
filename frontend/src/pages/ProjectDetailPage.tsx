@@ -78,6 +78,23 @@ export default function ProjectDetailPage() {
     }
   }
 
+  const handleExport = (format: 'csv' | 'json', datasetId?: string, datasetName?: string) => {
+    const url = datasetId
+      ? `/api/projects/${projectId}/datasets/${datasetId}/annotations`
+      : `/api/projects/${projectId}/annotations`
+    const safeName = (datasetName ?? project?.name ?? projectId)!.replace(/\s+/g, '_')
+    apiClient
+      .get(url, { params: { format }, responseType: 'blob' })
+      .then((r) => {
+        const blobUrl = URL.createObjectURL(r.data)
+        const a = document.createElement('a')
+        a.href = blobUrl
+        a.download = `peakme_${safeName}_annotations.${format}`
+        a.click()
+        URL.revokeObjectURL(blobUrl)
+      })
+  }
+
   if (isLoading) {
     return <div className="flex h-screen items-center justify-center text-gray-500">Loading…</div>
   }
@@ -87,7 +104,13 @@ export default function ProjectDetailPage() {
       <header className="border-b border-gray-800 bg-gray-900 px-6 py-4 flex items-center gap-4">
         <Link to="/projects" className="text-gray-400 hover:text-white">← Projects</Link>
         <h1 className="text-xl font-bold text-white">{project?.name}</h1>
-        <div className="ml-auto flex gap-3">
+        <div className="ml-auto flex items-center gap-3">
+          <button
+            onClick={() => handleExport('csv')}
+            className="rounded-lg bg-gray-800 px-3 py-1.5 text-sm text-gray-300 hover:text-white hover:bg-gray-700 transition-colors"
+          >
+            Export CSV
+          </button>
           <Link
             to={`/projects/${projectId}/stats`}
             className="text-sm text-gray-400 hover:text-white transition-colors"
@@ -123,12 +146,21 @@ export default function ProjectDetailPage() {
                       {ds.error_msg && <p className="text-xs text-red-400 mt-1">{ds.error_msg}</p>}
                     </div>
                     {ds.status === 'ready' && (
-                      <Link
-                        to={`/projects/${projectId}/annotate?dataset=${ds.id}`}
-                        className={`rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors ${done ? 'bg-gray-700 hover:bg-gray-600' : 'bg-brand-orange hover:bg-brand-red'}`}
-                      >
-                        {done ? 'Review' : 'Annotate'}
-                      </Link>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleExport('csv', ds.id, ds.name)}
+                          className="rounded-lg bg-gray-800 px-2.5 py-1.5 text-xs text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
+                          title="Export annotations as CSV"
+                        >
+                          ↓ CSV
+                        </button>
+                        <Link
+                          to={`/projects/${projectId}/annotate?dataset=${ds.id}`}
+                          className={`rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors ${done ? 'bg-gray-700 hover:bg-gray-600' : 'bg-brand-orange hover:bg-brand-red'}`}
+                        >
+                          {done ? 'Review' : 'Annotate'}
+                        </Link>
+                      </div>
                     )}
                   </div>
                   {ds.status === 'ready' && (

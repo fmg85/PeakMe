@@ -96,6 +96,80 @@ async def export_annotations(
         )
 
 
+@router.get("/{project_id}/datasets/{dataset_id}/annotations")
+async def export_dataset_annotations(
+    project_id: uuid.UUID,
+    dataset_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+    format: Literal["csv", "json"] = Query(default="csv"),
+):
+    """Export all annotations for a single dataset as CSV or JSON."""
+    result = await db.execute(
+        select(Annotation, Ion, User)
+        .join(Ion, Annotation.ion_id == Ion.id)
+        .join(User, Annotation.user_id == User.id)
+        .where(Ion.dataset_id == dataset_id)
+        .order_by(Ion.sort_order, User.display_name)
+    )
+    rows = result.all()
+
+    # Fetch dataset name for filename
+    ds_result = await db.execute(select(Dataset).where(Dataset.id == dataset_id))
+    dataset = ds_result.scalar_one_or_none()
+    safe_name = (dataset.name if dataset else str(dataset_id)).replace(" ", "_")
+
+    if format == "csv":
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow([
+            "ion_id", "mz_value", "label_name", "label_option_id",
+            "annotator", "annotator_id", "confidence", "time_spent_ms",
+            "annotated_at", "updated_at",
+        ])
+        for annotation, ion, user in rows:
+            writer.writerow([
+                str(annotation.ion_id),
+                ion.mz_value,
+                annotation.label_name,
+                str(annotation.label_option_id) if annotation.label_option_id else "",
+                user.display_name,
+                str(user.id),
+                annotation.confidence or "",
+                annotation.time_spent_ms or "",
+                annotation.created_at.isoformat(),
+                annotation.updated_at.isoformat(),
+            ])
+        output.seek(0)
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=peakme_{safe_name}_annotations.csv"},
+        )
+    else:
+        import json
+        data = [
+            {
+                "ion_id": str(a.ion_id),
+                "mz_value": ion.mz_value,
+                "label_name": a.label_name,
+                "label_option_id": str(a.label_option_id) if a.label_option_id else None,
+                "annotator": u.display_name,
+                "annotator_id": str(u.id),
+                "confidence": a.confidence,
+                "time_spent_ms": a.time_spent_ms,
+                "annotated_at": a.created_at.isoformat(),
+                "updated_at": a.updated_at.isoformat(),
+            }
+            for a, ion, u in rows
+        ]
+        return StreamingResponse(
+            iter([json.dumps(data, indent=2)]),
+            media_type="application/json",
+            headers={"Content-Disposition": f"attachment; filename=peakme_{safe_name}_annotations.json"},
+        )
+
+
 @router.get("/{project_id}/stats", response_model=StatsOut)
 async def get_stats(
     project_id: uuid.UUID,

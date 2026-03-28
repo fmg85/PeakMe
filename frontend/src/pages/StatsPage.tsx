@@ -26,7 +26,8 @@ export default function StatsPage() {
         const url = URL.createObjectURL(r.data)
         const a = document.createElement('a')
         a.href = url
-        a.download = `peakme_annotations_${projectId}.${format}`
+        const safeName = (project?.name ?? projectId)!.replace(/\s+/g, '_')
+        a.download = `peakme_${safeName}_annotations.${format}`
         a.click()
         URL.revokeObjectURL(url)
       })
