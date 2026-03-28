@@ -121,9 +121,12 @@ curl https://api.yourdomain.com/health
 5. Add environment variables:
    | Name | Value |
    |---|---|
-   | `VITE_API_URL` | `https://api.yourdomain.com` |
    | `VITE_SUPABASE_URL` | Your Supabase project URL |
    | `VITE_SUPABASE_ANON_KEY` | Your Supabase anon key |
+
+   > **Do not set `VITE_API_URL`.** The frontend uses relative `/api/` paths proxied
+   > by Vercel to EC2 via `vercel.json`. Setting this env var bakes a direct URL into
+   > the bundle and bypasses the proxy.
 6. Deploy
 
 After deployment, copy your Vercel URL (e.g. `https://peakme.vercel.app`) and:
@@ -139,16 +142,17 @@ Create a cron job to auto-renew:
 
 ## 10. Update PeakMe
 
-To deploy a new version:
+Deployments are automated via GitHub Actions on every push to `main`:
+- EC2: SSH deploy, Docker rebuild, `alembic upgrade head` (migrations run automatically)
+- Vercel: auto-deploys frontend on push to `main`
+
+To deploy manually:
 ```bash
 cd PeakMe
 git pull
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
-# Run migrations if needed:
-docker compose run --rm api alembic upgrade head
+docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T api alembic upgrade head
 ```
-
-Frontend on Vercel updates automatically on every push to `main`.
 
 ## Monitoring
 

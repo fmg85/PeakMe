@@ -17,7 +17,10 @@ cp frontend/.env.example frontend/.env.local
 ```
 
 Edit `.env` with your Supabase and AWS credentials (see comments in the file).
-Edit `frontend/.env.local` with your Supabase URL/anon key and API URL.
+Edit `frontend/.env.local` with your Supabase URL/anon key.
+
+> **Note:** Do not set `VITE_API_URL` — the frontend uses relative `/api/` paths.
+> In production, Vercel proxies these to the EC2 backend server-side.
 
 ## 2. Supabase setup
 
@@ -28,7 +31,9 @@ Edit `frontend/.env.local` with your Supabase URL/anon key and API URL.
    - JWT Secret → `SUPABASE_JWT_SECRET`
 3. From **Settings → Database**, copy the connection string (Session mode, port 5432) → `DATABASE_URL`
    - Replace `postgresql://` with `postgresql+asyncpg://`
-4. In **Authentication → Providers**, ensure **Email** is enabled (magic links)
+4. In **Authentication → Providers**, enable:
+   - **Email** — set to OTP mode (6-digit codes, not magic links)
+   - **Google** — add OAuth credentials from Google Cloud Console
 5. In **Authentication → URL Configuration**, add `http://localhost:5173` to allowed redirect URLs
 
 ## 3. AWS S3 setup
@@ -80,7 +85,7 @@ Frontend is now at `http://localhost:5173`.
 ## 7. Verify
 
 - Open `http://localhost:5173` → login page
-- Sign in with your email → check inbox for magic link
+- Sign in with your email → check inbox for a **6-digit OTP code**, or use **Sign in with Google**
 - Create a project, add labels, upload a test ZIP
 
 ### Creating a test ZIP
