@@ -419,10 +419,10 @@ export default function ProjectDetailPage() {
                   />
                   <button
                     onClick={() => startEdit(label)}
-                    className="text-gray-600 hover:text-gray-300 transition-colors text-xs"
+                    className="rounded px-2 py-0.5 text-xs text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
                     title="Edit label"
                   >
-                    ✎
+                    Edit
                   </button>
                   <button
                     onClick={() => deleteLabel.mutate(label.id)}
