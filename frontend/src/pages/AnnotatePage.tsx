@@ -27,6 +27,8 @@ export default function AnnotatePage() {
   const [anim, setAnim] = useState<AnimDirection>(null)
   const [zoomed, setZoomed] = useState(false)
   const [strategy, setStrategy] = useState<'unannotated_first' | 'starred_first' | 'all'>('unannotated_first')
+  const [sessionStarted, setSessionStarted] = useState(false)
+  const [sessionAnnotations, setSessionAnnotations] = useState(0)
   const lastAnnotationRef = useRef<{ ionId: string; labelId: string } | null>(null)
 
   // Drag state for swipe gesture
@@ -49,6 +51,13 @@ export default function AnnotatePage() {
     strategy,
   })
 
+  // Auto-start immediately if this is the user's first visit (nothing annotated yet)
+  useEffect(() => {
+    if (dataset && !sessionStarted && dataset.my_annotation_count === 0) {
+      setSessionStarted(true)
+    }
+  }, [dataset, sessionStarted])
+
   // Build swipe direction → label map
   const swipeMap = (project?.label_options ?? []).reduce<Partial<Record<SwipeDir, LabelOption>>>(
     (acc, l) => { if (l.swipe_direction) acc[l.swipe_direction] = l; return acc },
@@ -61,6 +70,7 @@ export default function AnnotatePage() {
     setAnim(direction)
     try {
       await apiClient.post(`/api/ions/${current.id}/annotate`, { label_option_id: label.id })
+      setSessionAnnotations((n) => n + 1)
     } catch {
       setAnim(null)
       return
@@ -115,8 +125,10 @@ export default function AnnotatePage() {
     return () => window.removeEventListener('keydown', handleKey)
   }, [project, annotate, toggleStar, undo])
 
-  const annotated = (dataset?.total_ions ?? 0) - remaining
-  const progress = dataset ? Math.round((annotated / dataset.total_ions) * 100) : 0
+  const annotated = (dataset?.my_annotation_count ?? 0) + sessionAnnotations
+  const total = dataset?.total_ions ?? 0
+  const remaining_unannotated = Math.max(0, total - annotated)
+  const progress = total > 0 ? Math.round((annotated / total) * 100) : 0
 
   // Derived drag values
   const [dx, dy] = dragXY
@@ -147,6 +159,64 @@ export default function AnnotatePage() {
     )
   }
 
+  // Session start screen — shown when returning to a partially-annotated dataset
+  if (!sessionStarted && dataset) {
+    const pct = total > 0 ? Math.round(((dataset.my_annotation_count) / total) * 100) : 0
+    const left = Math.max(0, total - dataset.my_annotation_count)
+    return (
+      <div className="flex h-screen flex-col bg-gray-950">
+        <header className="flex items-center border-b border-gray-800 bg-gray-900 px-4 py-3">
+          <Link to={`/projects/${projectId}`} className="text-sm text-gray-400 hover:text-white">
+            ← {project?.name ?? 'Project'}
+          </Link>
+        </header>
+        <div className="flex flex-1 items-center justify-center p-6">
+          <div className="w-full max-w-sm space-y-6">
+            <div>
+              <h1 className="text-xl font-bold text-white">{dataset.name}</h1>
+              <p className="mt-1 text-sm text-gray-400">
+                {dataset.my_annotation_count.toLocaleString()} of {total.toLocaleString()} ions annotated ({pct}%)
+              </p>
+              <div className="mt-3 h-2 rounded-full bg-gray-800">
+                <div className="h-2 rounded-full bg-brand-orange transition-all" style={{ width: `${pct}%` }} />
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <button
+                onClick={() => { setStrategy('unannotated_first'); setSessionStarted(true) }}
+                className="w-full rounded-xl bg-brand-orange px-4 py-3 text-left font-medium text-white hover:bg-brand-red transition-colors"
+              >
+                <div>▶ Resume</div>
+                <div className="text-sm font-normal opacity-80 mt-0.5">
+                  Continue from where you left off · {left.toLocaleString()} ion{left !== 1 ? 's' : ''} remaining
+                </div>
+              </button>
+              <button
+                onClick={() => { setStrategy('all'); setSessionStarted(true) }}
+                className="w-full rounded-xl bg-gray-800 px-4 py-3 text-left font-medium text-white hover:bg-gray-700 transition-colors"
+              >
+                <div>↩ Start from the beginning</div>
+                <div className="text-sm font-normal text-gray-400 mt-0.5">
+                  Review all {total.toLocaleString()} ions — re-annotate or change answers
+                </div>
+              </button>
+              {dataset.my_annotation_count > 0 && (
+                <button
+                  onClick={() => { setStrategy('starred_first'); setSessionStarted(true) }}
+                  className="w-full rounded-xl bg-gray-800 px-4 py-3 text-left font-medium text-yellow-400 hover:bg-gray-700 transition-colors"
+                >
+                  <div>★ Review starred only</div>
+                  <div className="text-sm font-normal text-gray-400 mt-0.5">Go through ions you flagged for review</div>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex h-screen flex-col bg-gray-950 select-none overflow-hidden">
       {/* Header */}
@@ -158,7 +228,8 @@ export default function AnnotatePage() {
           <p className="text-sm font-medium text-white">{dataset?.name}</p>
           {dataset && (
             <p className="text-xs text-gray-500">
-              {annotated.toLocaleString()} / {dataset.total_ions.toLocaleString()} annotated by you
+              {annotated.toLocaleString()} / {total.toLocaleString()} annotated
+              {strategy === 'unannotated_first' && remaining_unannotated > 0 && ` · ${remaining_unannotated.toLocaleString()} left`}
             </p>
           )}
         </div>
@@ -188,6 +259,12 @@ export default function AnnotatePage() {
                 : 'You reached the end of the dataset.'}
             </p>
             <div className="flex flex-col gap-2 items-center">
+              <button
+                onClick={() => { setSessionStarted(false); setSessionAnnotations(0) }}
+                className="w-48 rounded-lg bg-brand-orange px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-red transition-colors"
+              >
+                Back to session menu
+              </button>
               <button
                 onClick={() => { if (strategy === 'all') forceReload(); else setStrategy('all') }}
                 className="w-48 rounded-lg bg-gray-800 px-4 py-2.5 text-sm font-medium text-white hover:bg-gray-700 transition-colors"
