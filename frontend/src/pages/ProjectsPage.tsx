@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import apiClient from '../lib/apiClient'
 import { supabase } from '../lib/supabaseClient'
-import type { Project } from '../lib/types'
+import type { Project, User } from '../lib/types'
 
 export default function ProjectsPage() {
   const queryClient = useQueryClient()
@@ -11,9 +11,28 @@ export default function ProjectsPage() {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
 
+  // Profile state
+  const [showProfile, setShowProfile] = useState(false)
+  const [editingName, setEditingName] = useState('')
+  const profileRef = useRef<HTMLDivElement>(null)
+
   const { data: projects, isLoading } = useQuery<Project[]>({
     queryKey: ['projects'],
     queryFn: () => apiClient.get('/api/projects').then((r) => r.data),
+  })
+
+  const { data: me } = useQuery<User>({
+    queryKey: ['me'],
+    queryFn: () => apiClient.get('/api/auth/me').then((r) => r.data),
+  })
+
+  const updateProfile = useMutation({
+    mutationFn: (display_name: string) =>
+      apiClient.post('/api/auth/sync', { display_name }).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['me'] })
+      setShowProfile(false)
+    },
   })
 
   const createProject = useMutation({
@@ -27,15 +46,87 @@ export default function ProjectsPage() {
     },
   })
 
+  // Close profile dropdown when clicking outside
+  useEffect(() => {
+    if (!showProfile) return
+    const handleClick = (e: MouseEvent) => {
+      if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
+        setShowProfile(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [showProfile])
+
   const handleSignOut = () => supabase.auth.signOut()
+
+  const openProfile = () => {
+    setEditingName(me?.display_name ?? '')
+    setShowProfile(true)
+  }
 
   return (
     <div className="min-h-screen bg-gray-950">
       <header className="border-b border-gray-800 bg-gray-900 px-6 py-4 flex items-center justify-between">
         <h1 className="text-xl font-bold text-white">PeakMe</h1>
-        <button onClick={handleSignOut} className="text-sm text-gray-400 hover:text-white transition-colors">
-          Sign out
-        </button>
+        <div className="flex items-center gap-4">
+          <Link
+            to="/instructions"
+            className="text-sm text-gray-400 hover:text-white transition-colors"
+          >
+            Instructions
+          </Link>
+
+          {/* Profile dropdown */}
+          <div className="relative" ref={profileRef}>
+            <button
+              onClick={openProfile}
+              className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+            >
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-purple text-xs font-semibold text-white">
+                {me?.display_name?.[0]?.toUpperCase() ?? '?'}
+              </span>
+              <span className="hidden sm:inline">{me?.display_name ?? '…'}</span>
+            </button>
+
+            {showProfile && (
+              <div className="absolute right-0 top-full mt-2 w-72 rounded-xl border border-gray-700 bg-gray-900 p-4 shadow-2xl z-50 space-y-3">
+                <p className="text-xs text-gray-500">{me?.email}</p>
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-gray-400">Display name</label>
+                  <input
+                    value={editingName}
+                    onChange={(e) => setEditingName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && editingName.trim()) {
+                        updateProfile.mutate(editingName.trim())
+                      }
+                      if (e.key === 'Escape') setShowProfile(false)
+                    }}
+                    placeholder="Your name"
+                    className="w-full rounded-lg bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-purple"
+                    autoFocus
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { if (editingName.trim()) updateProfile.mutate(editingName.trim()) }}
+                    disabled={!editingName.trim() || updateProfile.isPending}
+                    className="flex-1 rounded-lg bg-brand-orange px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-red disabled:opacity-50 transition-colors"
+                  >
+                    Save
+                  </button>
+                  <button
+                    onClick={handleSignOut}
+                    className="rounded-lg bg-gray-800 px-3 py-1.5 text-sm text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
+                  >
+                    Sign out
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       </header>
 
       <main className="mx-auto max-w-3xl px-4 py-10">

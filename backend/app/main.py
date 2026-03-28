@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import auth, projects, labels, datasets, ions, annotations
+from app.routers import auth, projects, labels, datasets, ions, annotations, instructions
 
 app = FastAPI(
     title="PeakMe API",
@@ -24,6 +24,7 @@ app.include_router(labels.router)
 app.include_router(datasets.router)
 app.include_router(ions.router)
 app.include_router(annotations.router)
+app.include_router(instructions.router)
 
 
 @app.get("/health", tags=["health"])

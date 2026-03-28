@@ -7,6 +7,7 @@ import ProjectsPage from './pages/ProjectsPage'
 import ProjectDetailPage from './pages/ProjectDetailPage'
 import AnnotatePage from './pages/AnnotatePage'
 import StatsPage from './pages/StatsPage'
+import InstructionsPage from './pages/InstructionsPage'
 
 function App() {
   const [user, setUser] = useState<SupabaseUser | null | undefined>(undefined)
@@ -52,6 +53,10 @@ function App() {
         <Route
           path="/projects/:projectId/stats"
           element={user ? <StatsPage /> : <Navigate to="/login" replace />}
+        />
+        <Route
+          path="/instructions"
+          element={user ? <InstructionsPage /> : <Navigate to="/login" replace />}
         />
         <Route path="*" element={<Navigate to={user ? '/projects' : '/login'} replace />} />
       </Routes>
