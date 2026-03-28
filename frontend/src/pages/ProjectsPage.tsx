@@ -68,7 +68,7 @@ export default function ProjectsPage() {
   return (
     <div className="min-h-screen bg-gray-950">
       <header className="border-b border-gray-800 bg-gray-900 px-6 py-4 flex items-center justify-between">
-        <h1 className="text-xl font-bold text-white">PeakMe</h1>
+        <img src="/PeakMe_logo_orig.png" alt="PeakMe" className="h-8 w-auto" />
         <div className="flex items-center gap-4">
           <Link
             to="/instructions"
