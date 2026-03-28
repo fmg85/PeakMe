@@ -226,40 +226,57 @@ n_features <- length(mz_values)
 
 message("  Exporting ", n_features, " ion images to ", args$output, "/")
 
+# ── Pre-compute pixel → matrix index mapping ONCE (avoids recomputing per feature) ──
+coords  <- coord(msi)
+x_vals  <- coords$x
+y_vals  <- coords$y
+x_min   <- min(x_vals); y_min <- min(y_vals)
+n_rows  <- max(y_vals) - y_min + 1L
+n_cols  <- max(x_vals) - x_min + 1L
+xi_idx  <- x_vals - x_min + 1L
+yi_idx  <- y_vals - y_min + 1L
+mat_idx <- cbind(yi_idx, xi_idx)   # matrix subscript for vectorised fill
+
+# ── Materialise all intensities up-front if memory allows ────────────────────
+# iData() may be a memory-mapped matter_mat; row-by-row access re-reads disk
+# and re-applies any lazy normalisation for *each* feature — very slow.
+# Pulling it all into a plain matrix costs RAM but makes the loop 20-100× faster.
+gb_needed <- (n_features * ncol(msi) * 8) / 1e9
+message(sprintf("  Intensity matrix: %.1f GB needed", gb_needed))
+if (gb_needed < 4) {
+  message("  Materialising intensity matrix (this may take a moment)…")
+  int_mat <- as.matrix(iData(msi))   # features × pixels, plain R matrix
+  get_row <- function(i) int_mat[i, ]
+} else {
+  message("  Dataset too large to materialise; reading row-by-row (slower).")
+  get_row <- function(i) as.numeric(iData(msi)[i, ])
+}
+
 metadata_rows <- vector("list", n_features)
+t_start <- proc.time()[["elapsed"]]
 
 for (i in seq_along(mz_values)) {
-  mz_val <- mz_values[i]
-  fname  <- sprintf("%.4f.png", mz_val)
-  fpath  <- file.path(args$output, fname)
+  mz_val   <- mz_values[i]
+  fname    <- sprintf("%.4f.png", mz_val)
+  fpath    <- file.path(args$output, fname)
 
-  img_data <- iData(msi)[i, ]
+  img_data <- get_row(i)
 
-  coords  <- coord(msi)
-  x_vals  <- coords$x
-  y_vals  <- coords$y
-  x_range <- range(x_vals)
-  y_range <- range(y_vals)
-  mat     <- matrix(NA_real_,
-                    nrow = diff(y_range) + 1,
-                    ncol = diff(x_range) + 1)
-  for (px in seq_along(img_data)) {
-    xi <- x_vals[px] - x_range[1] + 1
-    yi <- y_vals[px] - y_range[1] + 1
-    mat[yi, xi] <- img_data[px]
-  }
+  # Vectorised fill — replaces the 100k-iteration R for-loop
+  mat <- matrix(NA_real_, nrow = n_rows, ncol = n_cols)
+  mat[mat_idx] <- img_data
 
   mat_min <- min(mat, na.rm = TRUE)
   mat_max <- max(mat, na.rm = TRUE)
   if (mat_max > mat_min) {
     mat_norm <- (mat - mat_min) / (mat_max - mat_min)
   } else {
-    mat_norm <- matrix(0, nrow = nrow(mat), ncol = ncol(mat))
+    mat_norm <- matrix(0, nrow = n_rows, ncol = n_cols)
   }
 
   png(fpath, width = args$width, height = args$height, bg = "black")
   par(mar = c(0, 0, 0, 0), oma = c(0, 0, 0, 0))
-  image(t(mat_norm[nrow(mat_norm):1, ]),
+  image(t(mat_norm[n_rows:1, ]),
         col = colors, axes = FALSE, xlab = "", ylab = "",
         zlim = c(0, 1), asp = 1)
   dev.off()
@@ -268,7 +285,11 @@ for (i in seq_along(mz_values)) {
                                    stringsAsFactors = FALSE)
 
   if (i %% 100 == 0 || i == n_features) {
-    message(sprintf("  Progress: %d / %d (%.0f%%)", i, n_features, 100 * i / n_features))
+    elapsed  <- proc.time()[["elapsed"]] - t_start
+    rate     <- i / elapsed
+    eta_min  <- (n_features - i) / rate / 60
+    message(sprintf("  Progress: %d / %d (%.0f%%) — %.1f img/s — ETA %.0f min",
+                    i, n_features, 100 * i / n_features, rate, eta_min))
   }
 }
 
