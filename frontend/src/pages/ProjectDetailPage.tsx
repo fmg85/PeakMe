@@ -13,7 +13,6 @@ type SwipeDir = 'left' | 'right' | 'up' | 'down'
 const SWIPE_DIRS: SwipeDir[] = ['left', 'right', 'up', 'down']
 const DIR_ARROW: Record<SwipeDir, string> = { left: '←', right: '→', up: '↑', down: '↓' }
 
-/** Mini 4-direction compass picker */
 function DirectionPicker({
   value,
   onChange,
@@ -46,16 +45,42 @@ function DirectionPicker({
   )
 }
 
+function ColorPicker({ value, onChange }: { value: string; onChange: (c: string) => void }) {
+  return (
+    <div className="flex gap-1.5">
+      {LABEL_COLORS.map((c) => (
+        <button
+          key={c}
+          type="button"
+          onClick={() => onChange(c)}
+          className={`h-5 w-5 rounded-full transition-transform ${value === c ? 'scale-125 ring-2 ring-white' : ''}`}
+          style={{ backgroundColor: c }}
+        />
+      ))}
+    </div>
+  )
+}
+
 export default function ProjectDetailPage() {
   const { projectId } = useParams<{ projectId: string }>()
   const queryClient = useQueryClient()
   const fileRef = useRef<HTMLInputElement>(null)
 
+  // new label form
   const [newLabel, setNewLabel] = useState('')
   const [newLabelColor, setNewLabelColor] = useState(LABEL_COLORS[0])
   const [newShortcut, setNewShortcut] = useState('')
   const [newSwipeDir, setNewSwipeDir] = useState<SwipeDir | null>(null)
+
+  // inline label editing
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editColor, setEditColor] = useState('')
+  const [editShortcut, setEditShortcut] = useState('')
+
+  // upload
   const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [datasetName, setDatasetName] = useState('')
   const [datasetDesc, setDatasetDesc] = useState('')
@@ -84,9 +109,12 @@ export default function ProjectDetailPage() {
   })
 
   const updateLabel = useMutation({
-    mutationFn: ({ id, ...body }: { id: string; swipe_direction: SwipeDir | null }) =>
+    mutationFn: ({ id, ...body }: { id: string; name?: string; color?: string; keyboard_shortcut?: string; swipe_direction?: SwipeDir | null }) =>
       apiClient.patch(`/api/labels/${id}`, body).then((r) => r.data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['project', projectId] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId] })
+      setEditingId(null)
+    },
   })
 
   const deleteLabel = useMutation({
@@ -94,10 +122,16 @@ export default function ProjectDetailPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['project', projectId] }),
   })
 
+  const deleteDataset = useMutation({
+    mutationFn: (datasetId: string) => apiClient.delete(`/api/datasets/${datasetId}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['datasets', projectId] }),
+  })
+
   const handleUpload = async () => {
     const file = fileRef.current?.files?.[0]
     if (!file || !datasetName.trim()) return
     setUploading(true)
+    setUploadProgress(0)
     setUploadError(null)
     const form = new FormData()
     form.append('project_id', projectId!)
@@ -106,7 +140,12 @@ export default function ProjectDetailPage() {
     if (sampleType) form.append('sample_type', sampleType)
     form.append('file', file)
     try {
-      await apiClient.post('/api/datasets/upload', form, { headers: { 'Content-Type': 'multipart/form-data' } })
+      await apiClient.post('/api/datasets/upload', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        onUploadProgress: (e) => {
+          if (e.total) setUploadProgress(Math.round((e.loaded / e.total) * 100))
+        },
+      })
       queryClient.invalidateQueries({ queryKey: ['datasets', projectId] })
       setDatasetName('')
       setDatasetDesc('')
@@ -116,6 +155,7 @@ export default function ProjectDetailPage() {
       setUploadError(err.response?.data?.detail || 'Upload failed')
     } finally {
       setUploading(false)
+      setUploadProgress(null)
     }
   }
 
@@ -134,7 +174,13 @@ export default function ProjectDetailPage() {
     })
   }
 
-  // Which directions are already claimed by existing labels (for the "new label" picker)
+  const startEdit = (label: LabelOption) => {
+    setEditingId(label.id)
+    setEditName(label.name)
+    setEditColor(label.color || LABEL_COLORS[0])
+    setEditShortcut(label.keyboard_shortcut || '')
+  }
+
   const usedDirs = (project?.label_options ?? [])
     .map((l) => l.swipe_direction)
     .filter(Boolean) as SwipeDir[]
@@ -186,23 +232,34 @@ export default function ProjectDetailPage() {
                       </p>
                       {ds.error_msg && <p className="text-xs text-red-400 mt-1">{ds.error_msg}</p>}
                     </div>
-                    {ds.status === 'ready' && (
-                      <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2">
+                      {ds.status === 'ready' && (
+                        <>
+                          <button
+                            onClick={() => handleExport('csv', ds.id, ds.name)}
+                            className="rounded-lg bg-gray-800 px-2.5 py-1.5 text-xs text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
+                            title="Export annotations as CSV"
+                          >
+                            ↓ CSV
+                          </button>
+                          <Link
+                            to={`/projects/${projectId}/annotate?dataset=${ds.id}`}
+                            className={`rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors ${done ? 'bg-gray-700 hover:bg-gray-600' : 'bg-brand-orange hover:bg-brand-red'}`}
+                          >
+                            {done ? 'Review' : 'Annotate'}
+                          </Link>
+                        </>
+                      )}
+                      {(ds.status === 'error' || ds.status === 'pending') && (
                         <button
-                          onClick={() => handleExport('csv', ds.id, ds.name)}
-                          className="rounded-lg bg-gray-800 px-2.5 py-1.5 text-xs text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
-                          title="Export annotations as CSV"
+                          onClick={() => deleteDataset.mutate(ds.id)}
+                          className="text-gray-600 hover:text-red-400 transition-colors text-sm"
+                          title="Remove dataset"
                         >
-                          ↓ CSV
+                          ✕
                         </button>
-                        <Link
-                          to={`/projects/${projectId}/annotate?dataset=${ds.id}`}
-                          className={`rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors ${done ? 'bg-gray-700 hover:bg-gray-600' : 'bg-brand-orange hover:bg-brand-red'}`}
-                        >
-                          {done ? 'Review' : 'Annotate'}
-                        </Link>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                   {ds.status === 'ready' && (
                     <div className="mt-2">
@@ -248,6 +305,26 @@ export default function ProjectDetailPage() {
             </div>
             <input ref={fileRef} type="file" accept=".zip" className="text-sm text-gray-400" />
             {uploadError && <p className="text-sm text-red-400">{uploadError}</p>}
+
+            {/* Progress bar */}
+            {uploadProgress !== null && (
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs text-gray-400">
+                  <span>{uploadProgress < 100 ? 'Uploading…' : 'Processing…'}</span>
+                  {uploadProgress < 100 && <span>{uploadProgress}%</span>}
+                </div>
+                <div className="h-1.5 rounded-full bg-gray-800">
+                  <div
+                    className={`h-1.5 rounded-full transition-all duration-300 ${uploadProgress < 100 ? 'bg-indigo-500' : 'bg-brand-orange animate-pulse'}`}
+                    style={{ width: uploadProgress < 100 ? `${uploadProgress}%` : '100%' }}
+                  />
+                </div>
+                {uploadProgress === 100 && (
+                  <p className="text-xs text-gray-500">File received — ingesting ions…</p>
+                )}
+              </div>
+            )}
+
             <button
               onClick={handleUpload}
               disabled={uploading || !datasetName.trim()}
@@ -264,11 +341,61 @@ export default function ProjectDetailPage() {
 
           <div className="space-y-2">
             {project?.label_options.map((label) => {
-              // Directions available for THIS label's picker (blocked = used by others)
               const otherDirs = (project.label_options ?? [])
                 .filter((l) => l.id !== label.id)
                 .map((l) => l.swipe_direction)
                 .filter(Boolean) as SwipeDir[]
+
+              if (editingId === label.id) {
+                return (
+                  <div key={label.id} className="rounded-lg bg-gray-900 px-4 py-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        className="flex-1 rounded bg-gray-800 px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        autoFocus
+                      />
+                      <input
+                        value={editShortcut}
+                        onChange={(e) => setEditShortcut(e.target.value.slice(0, 1))}
+                        placeholder="Key"
+                        maxLength={1}
+                        className="w-12 rounded bg-gray-800 px-2 py-1.5 text-sm text-white text-center focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                      <DirectionPicker
+                        value={label.swipe_direction}
+                        usedDirs={otherDirs}
+                        onChange={(d) => updateLabel.mutate({ id: label.id, swipe_direction: d })}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <ColorPicker value={editColor} onChange={setEditColor} />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setEditingId(null)}
+                          className="rounded px-2 py-1 text-xs text-gray-400 hover:text-white transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={() => updateLabel.mutate({
+                            id: label.id,
+                            name: editName.trim() || undefined,
+                            color: editColor,
+                            keyboard_shortcut: editShortcut || undefined,
+                          })}
+                          disabled={!editName.trim() || updateLabel.isPending}
+                          className="rounded bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-500 disabled:opacity-50 transition-colors"
+                        >
+                          Save
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )
+              }
+
               return (
                 <div key={label.id} className="flex items-center gap-3 rounded-lg bg-gray-900 px-4 py-3">
                   <span
@@ -286,6 +413,13 @@ export default function ProjectDetailPage() {
                     usedDirs={otherDirs}
                     onChange={(d) => updateLabel.mutate({ id: label.id, swipe_direction: d })}
                   />
+                  <button
+                    onClick={() => startEdit(label)}
+                    className="text-gray-600 hover:text-gray-300 transition-colors text-xs"
+                    title="Edit label"
+                  >
+                    ✎
+                  </button>
                   <button
                     onClick={() => deleteLabel.mutate(label.id)}
                     className="text-gray-600 hover:text-red-400 transition-colors text-sm"

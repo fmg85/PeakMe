@@ -26,7 +26,6 @@ function OptionTable() {
     ['--colormap', 'viridis', 'Color scale: viridis, magma, plasma, inferno, cividis'],
     ['--normalize', 'rms', 'Normalization: tic, rms, none'],
     ['--zip', 'off', 'Automatically zip the output folder'],
-    ['--object-name', 'auto', 'Object name in .RData file'],
   ]
   return (
     <div className="overflow-x-auto rounded-lg border border-gray-800">
@@ -104,7 +103,7 @@ export default function InstructionsPage() {
   install.packages("BiocManager")
 
 BiocManager::install("Cardinal")
-install.packages(c("viridis", "optparse"))`}</CodeBlock>
+install.packages(c("viridis", "optparse", "png"))`}</CodeBlock>
         </Section>
 
         {/* Step 2 */}
@@ -194,7 +193,7 @@ Rscript export_cardinal_pngs.R \\
           <ul className="space-y-3 text-sm text-gray-300">
             <li className="flex gap-2">
               <span className="text-brand-orange flex-shrink-0">•</span>
-              <span><strong className="text-white">Large datasets (&gt;10,000 ions):</strong> The script prints progress every 100 ions. A 10,000-ion dataset typically takes 5–15 minutes.</span>
+              <span><strong className="text-white">Large datasets:</strong> The script prints rate and ETA every 100 ions. A 5,000-ion dataset with 100k pixels typically takes a few minutes.</span>
             </li>
             <li className="flex gap-2">
               <span className="text-brand-orange flex-shrink-0">•</span>
