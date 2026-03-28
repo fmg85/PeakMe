@@ -1,4 +1,3 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import apiClient from '../lib/apiClient'
 import type { IonQueueItem } from '../lib/types'
@@ -16,6 +15,8 @@ export function useAnnotationQueue({ datasetId, strategy = 'unannotated_first' }
   const [offset, setOffset] = useState(0)
   const [exhausted, setExhausted] = useState(false)
   const prefetchingRef = useRef(false)
+  // Prevents prefetch effect from firing before the initial batch completes
+  const initializedRef = useRef(false)
 
   const fetchBatch = useCallback(async (batchOffset: number): Promise<IonQueueItem[]> => {
     const { data } = await apiClient.get<IonQueueItem[]>(
@@ -27,6 +28,7 @@ export function useAnnotationQueue({ datasetId, strategy = 'unannotated_first' }
 
   // Initial load
   useEffect(() => {
+    initializedRef.current = false
     setQueue([])
     setOffset(0)
     setExhausted(false)
@@ -34,13 +36,14 @@ export function useAnnotationQueue({ datasetId, strategy = 'unannotated_first' }
       setQueue(items)
       setOffset(items.length)
       if (items.length < BATCH_SIZE) setExhausted(true)
-      // Prefetch images for first batch
       items.forEach((item) => prefetchImage(item.image_url))
+      initializedRef.current = true
     })
   }, [datasetId, strategy])
 
   // Prefetch next batch when queue gets low
   useEffect(() => {
+    if (!initializedRef.current) return
     if (queue.length <= PREFETCH_AHEAD && !exhausted && !prefetchingRef.current) {
       prefetchingRef.current = true
       fetchBatch(offset).then((items) => {
@@ -74,3 +77,4 @@ function prefetchImage(url: string) {
   const img = new Image()
   img.src = url
 }
+

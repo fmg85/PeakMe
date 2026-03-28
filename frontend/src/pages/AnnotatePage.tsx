@@ -120,7 +120,7 @@ export default function AnnotatePage() {
       {/* Progress bar */}
       <div className="h-1 bg-gray-800">
         <div
-          className="h-1 bg-indigo-500 transition-all duration-500"
+          className="h-1 bg-brand-orange transition-all duration-500"
           style={{ width: `${progress}%` }}
         />
       </div>
@@ -151,11 +151,11 @@ export default function AnnotatePage() {
 
             {/* Ion image card */}
             <div
-              className={`relative cursor-zoom-in rounded-xl overflow-hidden shadow-2xl transition-all
+              className={`relative rounded-xl overflow-hidden shadow-2xl transition-all
                 ${anim === 'left' ? 'animate-slide-left' : anim === 'right' ? 'animate-slide-right' : 'animate-fade-in'}
                 ${zoomed ? 'cursor-zoom-out' : 'cursor-zoom-in'}
               `}
-              style={{ maxWidth: '420px', width: '100%' }}
+              style={{ width: 'min(55vmin, 90vw)', aspectRatio: '1 / 1' }}
               onClick={() => setZoomed((z) => !z)}
             >
               <img
