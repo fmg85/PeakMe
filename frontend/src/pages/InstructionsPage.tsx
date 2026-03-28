@@ -19,7 +19,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 function OptionTable() {
   const rows = [
-    ['--input', '(required)', 'Path to .imzML or .RData file'],
+    ['--file', '(required)', 'Path to .imzML or .RData file'],
     ['--output', './peakme_export', 'Output directory'],
     ['--width', '400', 'Image width in pixels'],
     ['--height', '400', 'Image height in pixels'],
@@ -110,52 +110,49 @@ install.packages(c("viridis", "optparse"))`}</CodeBlock>
         {/* Step 2 */}
         <Section title="Step 2 — Run the Export Script">
           <p className="text-sm text-gray-400">
-            Download the R script using the button above, then choose the method that fits your setup.
+            The script works with any <code className="rounded bg-gray-800 px-1 text-green-300">MSImagingExperiment</code> — raw read-in, peak-picked, aligned, filtered, whatever state your data is in.
           </p>
 
-          {/* RStudio tab */}
+          {/* RStudio block */}
           <div className="mt-4 rounded-lg border border-brand-purple/40 bg-brand-purple/10 p-4 space-y-2">
-            <p className="text-sm font-semibold text-brand-purple">RStudio (Windows or Mac) — recommended for interactive use</p>
+            <p className="text-sm font-semibold text-brand-purple">RStudio (Windows or Mac) — recommended</p>
             <ol className="text-sm text-gray-300 space-y-1 list-decimal list-inside">
               <li>Open <code className="rounded bg-gray-800 px-1 text-green-300">export_cardinal_pngs.R</code> in RStudio</li>
-              <li>Edit the config block near the top of the file — set your file path and output folder:</li>
+              <li>Edit the config block near the top — two options:</li>
             </ol>
-            <CodeBlock>{`args <- list(
-  input     = "C:/Users/YourName/data/sample.imzML",  # ← your file
-  output    = "C:/Users/YourName/peakme_export",       # ← where to save
-  colormap  = "viridis",
-  normalize = "rms",
-  zip       = TRUE   # creates .zip ready to upload
-)`}</CodeBlock>
+            <p className="text-xs text-gray-400 pl-4">
+              <strong className="text-gray-200">Option A</strong> — object already in your session (e.g. after loading or processing in Cardinal):
+            </p>
+            <CodeBlock>{`msi_object = "msi",   # name of your MSImagingExperiment variable
+                       # run ls() in the Console to see what's loaded
+msi_file   = NULL,`}</CodeBlock>
+            <p className="text-xs text-gray-400 pl-4">
+              <strong className="text-gray-200">Option B</strong> — load from a file (.imzML or .RData):
+            </p>
+            <CodeBlock>{`msi_object = NULL,
+msi_file   = "C:/Users/YourName/data/sample.imzML",
+             # or "C:/Users/YourName/experiment.RData"`}</CodeBlock>
+            <p className="text-xs text-gray-400 pl-4">
+              If your .RData has multiple objects, the script auto-detects all <code className="rounded bg-gray-800 px-1 text-green-300">MSImagingExperiment</code>s and tells you their names — then you can switch to Option A and name the right one.
+            </p>
             <ol className="text-sm text-gray-300 space-y-1 list-decimal list-inside" start={3}>
-              <li>Press <kbd className="rounded bg-gray-700 px-1.5 py-0.5 text-xs">Ctrl+Shift+S</kbd> (Windows) or <kbd className="rounded bg-gray-700 px-1.5 py-0.5 text-xs">⌘⇧S</kbd> (Mac) to Source the script</li>
-              <li>Watch the Console for progress — done when you see <code className="rounded bg-gray-800 px-1 text-green-300">Done. Upload … to PeakMe.</code></li>
+              <li>Also set <code className="rounded bg-gray-800 px-1 text-green-300">output</code> to where you want the PNGs saved</li>
+              <li>Press <kbd className="rounded bg-gray-700 px-1.5 py-0.5 text-xs">Ctrl+Shift+S</kbd> (Windows) or <kbd className="rounded bg-gray-700 px-1.5 py-0.5 text-xs">⌘⇧S</kbd> (Mac) to Source</li>
+              <li>Watch the Console — done when you see <code className="rounded bg-gray-800 px-1 text-green-300">Done. Upload … to PeakMe.</code></li>
             </ol>
           </div>
 
-          <h3 className="text-sm font-medium text-gray-300 mt-5">Terminal / command line (Mac, Linux, Windows PowerShell)</h3>
+          <h3 className="text-sm font-medium text-gray-300 mt-5">Terminal / command line</h3>
           <CodeBlock>{`Rscript export_cardinal_pngs.R \\
-  --input /path/to/your/data.imzML \\
+  --file /path/to/data.imzML \\
   --output ./peakme_export \\
-  --colormap viridis \\
-  --normalize rms \\
-  --zip`}</CodeBlock>
+  --zip
 
-          <h3 className="text-sm font-medium text-gray-300 mt-4">From a saved .RData / .rda file</h3>
-          <CodeBlock>{`# In R: save your experiment first
-save(msi_experiment, file = "my_experiment.RData")
-
-# RStudio: set  input = "C:/path/to/my_experiment.RData"  in the config block
-# Terminal:
+# or from an RData file:
 Rscript export_cardinal_pngs.R \\
-  --input my_experiment.RData \\
+  --file /path/to/experiment.RData \\
   --output ./peakme_export \\
   --zip`}</CodeBlock>
-          <p className="text-xs text-gray-500">
-            If the .RData contains multiple objects, set{' '}
-            <code className="rounded bg-gray-800 px-1 text-green-300">`object-name` = "msi_experiment"</code>{' '}
-            in the config block (or <code className="rounded bg-gray-800 px-1 text-green-300">--object-name msi_experiment</code> on the CLI).
-          </p>
 
           <h3 className="text-sm font-medium text-gray-300 mt-4">All options:</h3>
           <OptionTable />

@@ -1,3 +1,4 @@
+#!/usr/bin/env Rscript
 # =============================================================================
 # PeakMe: Cardinal MSI → PNG Export Script
 # =============================================================================
@@ -5,17 +6,25 @@
 # a metadata.csv manifest. The output folder can be zipped and uploaded to
 # PeakMe for annotation.
 #
+# The script accepts an MSImagingExperiment from any source:
+#   - already loaded in your R session (peak-picked, aligned, filtered, raw…)
+#   - read from an .imzML file
+#   - loaded from a saved .RData / .rda file
+#
 # Dependencies:
 #   install.packages("BiocManager")
 #   BiocManager::install("Cardinal")
 #   install.packages(c("viridis", "optparse"))
 #
-# ── RStudio / interactive use (Windows or Mac) ───────────────────────────────
+# ── RStudio / interactive use ─────────────────────────────────────────────────
 # 1. Edit the config block below (lines marked EDIT ME)
-# 2. Click Source (or press Ctrl+Shift+S / Cmd+Shift+S)
+# 2. Click Source  (Ctrl+Shift+S on Windows · Cmd+Shift+S on Mac)
 #
 # ── Command-line use ─────────────────────────────────────────────────────────
-#   Rscript export_cardinal_pngs.R --input path/to/data.imzML --output ./peakme_export
+#   # From an object name in a running R session — not applicable on CLI
+#   # From a file:
+#   Rscript export_cardinal_pngs.R --file path/to/data.imzML --output ./peakme_export
+#   Rscript export_cardinal_pngs.R --file path/to/experiment.RData --output ./peakme_export
 #
 # See docs/r-export-workflow.md for full instructions.
 # =============================================================================
@@ -33,23 +42,34 @@ suppressPackageStartupMessages({
 # ---------------------------------------------------------------------------
 if (interactive()) {
   args <- list(
-    input        = "C:/path/to/your/data.imzML",  # EDIT ME — .imzML or .RData
-    output       = "./peakme_export",              # EDIT ME — output folder
-    width        = 400L,
-    height       = 400L,
-    colormap     = "viridis",   # viridis | magma | plasma | inferno | cividis
-    normalize    = "rms",       # rms | tic | none
-    zip          = TRUE,        # create a .zip ready for PeakMe upload?
-    `object-name` = NULL        # RData only: object name, or NULL to auto-detect
+    # ── Where is your MSImagingExperiment? Set ONE of the two options below ──
+
+    # Option A: name of a variable already loaded in your R session
+    #   (works for raw read-ins, peak-picked, aligned, filtered — anything)
+    msi_object = "msi",   # EDIT ME — run ls() to see your variable names
+                           #           set to NULL to use Option B instead
+
+    # Option B: path to a file to load from (imzML or RData)
+    #   (used only when msi_object is NULL)
+    msi_file   = NULL,    # EDIT ME — e.g. "C:/data/sample.imzML"
+                           #                  "C:/data/experiment.RData"
+
+    # ── Output settings ──────────────────────────────────────────────────────
+    output    = "./peakme_export",  # EDIT ME — folder to write PNGs into
+    width     = 400L,
+    height    = 400L,
+    colormap  = "viridis",  # viridis | magma | plasma | inferno | cividis
+    normalize = "rms",      # rms | tic | none
+    zip       = TRUE        # TRUE = create a .zip ready to upload to PeakMe
   )
 } else {
   # ---------------------------------------------------------------------------
   # CLI argument parsing (Rscript / terminal use)
   # ---------------------------------------------------------------------------
   option_list <- list(
-    make_option(c("-i", "--input"),
+    make_option(c("-f", "--file"),
       type = "character", default = NULL,
-      help = "Path to .imzML file or .RData file containing an MSImagingExperiment object",
+      help = "Path to .imzML or .RData file containing an MSImagingExperiment",
       metavar = "FILE"
     ),
     make_option(c("-o", "--output"),
@@ -76,59 +96,94 @@ if (interactive()) {
     make_option(c("--zip"),
       action = "store_true", default = FALSE,
       help = "Zip the output directory after export (produces <output>.zip)"
-    ),
-    make_option(c("--object-name"),
-      type = "character", default = NULL,
-      help = "Name of the MSImagingExperiment object in .RData file (auto-detected if omitted)"
     )
   )
 
   parser <- OptionParser(
     usage = "%prog [options]",
     option_list = option_list,
-    description = "Export Cardinal MSI data to PNGs for PeakMe annotation"
+    description = "Export a Cardinal MSImagingExperiment to PNGs for PeakMe annotation"
   )
   args <- parse_args(parser)
+  args$msi_object <- NULL
+  args$msi_file   <- args$file
 
-  if (is.null(args$input)) {
+  if (is.null(args$msi_file)) {
     print_help(parser)
-    stop("--input is required", call. = FALSE)
+    stop("--file is required", call. = FALSE)
   }
 }
 
 # ---------------------------------------------------------------------------
-# Load MSImagingExperiment
+# Load / locate the MSImagingExperiment
 # ---------------------------------------------------------------------------
-message("PeakMe export: loading data from ", args$input)
+if (!is.null(args$msi_object)) {
+  # ── Option A: object already in the R session ──
+  if (!exists(args$msi_object, envir = .GlobalEnv)) {
+    stop(
+      "Object '", args$msi_object, "' not found in your R session.\n",
+      "  Run ls() to see available variables, or set msi_file to load from a file.",
+      call. = FALSE
+    )
+  }
+  msi <- get(args$msi_object, envir = .GlobalEnv)
+  message("PeakMe export: using object '", args$msi_object, "' from R session")
 
-ext <- tolower(tools::file_ext(args$input))
+} else if (!is.null(args$msi_file)) {
+  # ── Option B: load from a file ──
+  message("PeakMe export: loading from ", args$msi_file)
+  ext <- tolower(tools::file_ext(args$msi_file))
 
-if (ext == "imzml") {
-  msi <- readMSIData(args$input)
-} else if (ext %in% c("rdata", "rda")) {
-  env <- new.env()
-  load(args$input, envir = env)
-  obj_names <- ls(env)
+  if (ext == "imzml") {
+    msi <- readMSIData(args$msi_file)
 
-  if (!is.null(args[["object-name"]])) {
-    obj_name <- args[["object-name"]]
-  } else {
-    # Auto-detect: find the first MSImagingExperiment
-    msi_names <- obj_names[sapply(obj_names, function(n) {
-      inherits(get(n, envir = env), "MSImagingExperiment")
-    })]
+  } else if (ext %in% c("rdata", "rda")) {
+    env <- new.env()
+    load(args$msi_file, envir = env)
+
+    # Find MSImagingExperiment objects in the file
+    msi_names <- Filter(
+      function(n) inherits(get(n, envir = env), "MSImagingExperiment"),
+      ls(env)
+    )
     if (length(msi_names) == 0) {
-      stop("No MSImagingExperiment found in .RData file. Use --object-name to specify.", call. = FALSE)
+      stop(
+        "No MSImagingExperiment found in ", args$msi_file, ".\n",
+        "  Objects present: ", paste(ls(env), collapse = ", "),
+        call. = FALSE
+      )
     }
-    obj_name <- msi_names[1]
-    message("  Auto-detected MSImagingExperiment object: ", obj_name)
+    if (length(msi_names) > 1) {
+      message("  Found multiple MSImagingExperiment objects: ", paste(msi_names, collapse = ", "))
+      message("  Using the first: '", msi_names[1], "'")
+      message("  To use a different one, set msi_object = \"", msi_names[2], "\" instead.")
+    }
+    msi <- get(msi_names[1], envir = env)
+    message("  Loaded: '", msi_names[1], "'")
+
+  } else {
+    stop("Unsupported file type '.", ext, "' — use .imzML or .RData", call. = FALSE)
   }
-  msi <- get(obj_name, envir = env)
+
 } else {
-  stop("Unsupported file type: ", ext, ". Use .imzML or .RData", call. = FALSE)
+  stop(
+    "Nothing to load.\n",
+    "  In RStudio: set msi_object (variable name) or msi_file (file path) in the config block.\n",
+    "  On CLI: use --file path/to/data.imzML",
+    call. = FALSE
+  )
 }
 
-message("  Loaded: ", ncol(msi), " pixels, ", length(mz(msi)), " m/z features")
+# Verify we actually have an MSImagingExperiment
+if (!inherits(msi, "MSImagingExperiment")) {
+  stop(
+    "Expected an MSImagingExperiment but got: ", class(msi)[1], ".\n",
+    "  Make sure the object is a Cardinal MSImagingExperiment.",
+    call. = FALSE
+  )
+}
+
+message("  Dimensions: ", ncol(msi), " pixels · ", length(mz(msi)), " m/z features")
 
 # ---------------------------------------------------------------------------
 # Normalization
@@ -152,7 +207,7 @@ cmap_fn <- switch(args$colormap,
 colors <- cmap_fn(256)
 
 # ---------------------------------------------------------------------------
-# Create output directory (clean any previous run first)
+# Create output directory (clean previous PNGs/CSVs if re-running)
 # ---------------------------------------------------------------------------
 if (dir.exists(args$output)) {
   old_files <- list.files(args$output, pattern = "\\.png$|\\.csv$", full.names = TRUE)
@@ -164,9 +219,9 @@ if (dir.exists(args$output)) {
 dir.create(args$output, recursive = TRUE, showWarnings = FALSE)
 
 # ---------------------------------------------------------------------------
-# Export each m/z feature
+# Export each m/z feature as a PNG
 # ---------------------------------------------------------------------------
-mz_values <- mz(msi)
+mz_values  <- mz(msi)
 n_features <- length(mz_values)
 
 message("  Exporting ", n_features, " ion images to ", args$output, "/")
@@ -174,29 +229,26 @@ message("  Exporting ", n_features, " ion images to ", args$output, "/")
 metadata_rows <- vector("list", n_features)
 
 for (i in seq_along(mz_values)) {
-  mz_val  <- mz_values[i]
-  fname   <- sprintf("%.4f.png", mz_val)
-  fpath   <- file.path(args$output, fname)
+  mz_val <- mz_values[i]
+  fname  <- sprintf("%.4f.png", mz_val)
+  fpath  <- file.path(args$output, fname)
 
-  # Extract intensity matrix for this feature
-  img_data <- iData(msi)[i, ]  # 1 x n_pixels vector
+  img_data <- iData(msi)[i, ]
 
-  # Reshape to 2D spatial grid
-  coords   <- coord(msi)
-  x_vals   <- coords$x
-  y_vals   <- coords$y
-  x_range  <- range(x_vals)
-  y_range  <- range(y_vals)
-  mat      <- matrix(NA_real_,
-                     nrow = diff(y_range) + 1,
-                     ncol = diff(x_range) + 1)
+  coords  <- coord(msi)
+  x_vals  <- coords$x
+  y_vals  <- coords$y
+  x_range <- range(x_vals)
+  y_range <- range(y_vals)
+  mat     <- matrix(NA_real_,
+                    nrow = diff(y_range) + 1,
+                    ncol = diff(x_range) + 1)
   for (px in seq_along(img_data)) {
     xi <- x_vals[px] - x_range[1] + 1
     yi <- y_vals[px] - y_range[1] + 1
     mat[yi, xi] <- img_data[px]
   }
 
-  # Normalize to [0, 1] for colormap
   mat_min <- min(mat, na.rm = TRUE)
   mat_max <- max(mat, na.rm = TRUE)
   if (mat_max > mat_min) {
@@ -205,19 +257,15 @@ for (i in seq_along(mz_values)) {
     mat_norm <- matrix(0, nrow = nrow(mat), ncol = ncol(mat))
   }
 
-  # Write PNG
   png(fpath, width = args$width, height = args$height, bg = "black")
   par(mar = c(0, 0, 0, 0), oma = c(0, 0, 0, 0))
-  image(t(mat_norm[nrow(mat_norm):1, ]),  # flip y-axis to match display convention
+  image(t(mat_norm[nrow(mat_norm):1, ]),
         col = colors, axes = FALSE, xlab = "", ylab = "",
         zlim = c(0, 1), asp = 1)
   dev.off()
 
-  metadata_rows[[i]] <- data.frame(
-    filename = fname,
-    mz_value = mz_val,
-    stringsAsFactors = FALSE
-  )
+  metadata_rows[[i]] <- data.frame(filename = fname, mz_value = mz_val,
+                                   stringsAsFactors = FALSE)
 
   if (i %% 100 == 0 || i == n_features) {
     message(sprintf("  Progress: %d / %d (%.0f%%)", i, n_features, 100 * i / n_features))
@@ -227,10 +275,10 @@ for (i in seq_along(mz_values)) {
 # ---------------------------------------------------------------------------
 # Write metadata.csv
 # ---------------------------------------------------------------------------
-metadata <- do.call(rbind, metadata_rows)
+metadata      <- do.call(rbind, metadata_rows)
 metadata_path <- file.path(args$output, "metadata.csv")
 write.csv(metadata, metadata_path, row.names = FALSE)
-message("  Wrote metadata.csv with ", nrow(metadata), " rows")
+message("  Wrote metadata.csv (", nrow(metadata), " ions)")
 
 # ---------------------------------------------------------------------------
 # Optional zip
@@ -239,7 +287,7 @@ if (args$zip) {
   zip_path <- paste0(args$output, ".zip")
   message("  Creating zip: ", zip_path)
   zip(zip_path, files = args$output, flags = "-r9q")
-  message("  Done. Upload ", zip_path, " to PeakMe.")
+  message("  Done. Upload '", basename(zip_path), "' to PeakMe.")
 } else {
   message("  Done. Zip the '", basename(args$output), "/' folder and upload to PeakMe.")
   message("  Quick zip command:")
