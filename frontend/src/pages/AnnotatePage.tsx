@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useDrag } from '@use-gesture/react'
@@ -124,7 +124,7 @@ export default function AnnotatePage() {
   const dragDist = Math.sqrt(dx * dx + dy * dy)
   const committed = dragDist >= SWIPE_COMMIT
 
-  const cardStyle: React.CSSProperties = {
+  const cardStyle: CSSProperties = {
     transform: isDragging
       ? `translate(${dx}px, ${dy}px) rotate(${dx * 0.06}deg)`
       : anim === 'left'  ? 'translateX(-120%) rotate(-20deg)'
@@ -329,12 +329,12 @@ interface SwipeEdgeProps {
 function SwipeEdge({ dir, label, opacity }: SwipeEdgeProps) {
   if (!label || opacity <= 0) return null
 
-  const posStyle: React.CSSProperties = {
-    left:  { position: 'absolute', left: 0, top: '50%', transform: 'translate(-50%, -50%)' },
-    right: { position: 'absolute', right: 0, top: '50%', transform: 'translate(50%, -50%)' },
-    up:    { position: 'absolute', top: 0, left: '50%', transform: 'translate(-50%, -50%)' },
-    down:  { position: 'absolute', bottom: 0, left: '50%', transform: 'translate(-50%, 50%)' },
-  }[dir]
+  const posStyle = ({
+    left:  { position: 'absolute' as const, left: 0, top: '50%', transform: 'translate(-50%, -50%)' },
+    right: { position: 'absolute' as const, right: 0, top: '50%', transform: 'translate(50%, -50%)' },
+    up:    { position: 'absolute' as const, top: 0, left: '50%', transform: 'translate(-50%, -50%)' },
+    down:  { position: 'absolute' as const, bottom: 0, left: '50%', transform: 'translate(-50%, 50%)' },
+  } satisfies Record<SwipeDir, CSSProperties>)[dir]
 
   return (
     <div

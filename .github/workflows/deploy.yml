@@ -18,4 +18,5 @@ jobs:
             cd ~/PeakMe
             git pull origin main
             docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T api alembic upgrade head
             docker image prune -f
