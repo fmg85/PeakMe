@@ -14,7 +14,7 @@
 # Dependencies:
 #   install.packages("BiocManager")
 #   BiocManager::install("Cardinal")
-#   install.packages(c("viridis", "optparse"))
+#   install.packages(c("viridis", "optparse", "png"))
 #
 # ── RStudio / interactive use ─────────────────────────────────────────────────
 # 1. Edit the config block below (lines marked EDIT ME)
@@ -34,6 +34,7 @@ suppressPackageStartupMessages({
   library(viridis)
   library(optparse)
   library(grDevices)
+  library(png)
 })
 
 # ---------------------------------------------------------------------------
@@ -226,7 +227,7 @@ n_features <- length(mz_values)
 
 message("  Exporting ", n_features, " ion images to ", args$output, "/")
 
-# ── Pre-compute pixel → matrix index mapping ONCE (avoids recomputing per feature) ──
+# ── Pre-compute pixel → matrix index mapping ONCE ────────────────────────────
 coords  <- coord(msi)
 x_vals  <- coords$x
 y_vals  <- coords$y
@@ -235,22 +236,26 @@ n_rows  <- max(y_vals) - y_min + 1L
 n_cols  <- max(x_vals) - x_min + 1L
 xi_idx  <- x_vals - x_min + 1L
 yi_idx  <- y_vals - y_min + 1L
-mat_idx <- cbind(yi_idx, xi_idx)   # matrix subscript for vectorised fill
+mat_idx <- cbind(yi_idx, xi_idx)
 
 # ── Materialise all intensities up-front if memory allows ────────────────────
-# iData() may be a memory-mapped matter_mat; row-by-row access re-reads disk
-# and re-applies any lazy normalisation for *each* feature — very slow.
-# Pulling it all into a plain matrix costs RAM but makes the loop 20-100× faster.
-gb_needed <- (n_features * ncol(msi) * 8) / 1e9
-message(sprintf("  Intensity matrix: %.1f GB needed", gb_needed))
-if (gb_needed < 4) {
+# Cardinal may store iData() as a memory-mapped matter_mat; row-by-row access
+# re-reads disk and re-applies any lazy normalisation for every feature.
+# Estimate bytes assuming float32 (Cardinal's default storage type).
+bytes_per_val <- if (is.double(iData(msi)[1L, 1L])) 8 else 4
+gb_needed <- (n_features * ncol(msi) * bytes_per_val) / 1e9
+message(sprintf("  Intensity matrix: ~%.1f GB needed", gb_needed))
+if (gb_needed < 8) {
   message("  Materialising intensity matrix (this may take a moment)…")
   int_mat <- as.matrix(iData(msi))   # features × pixels, plain R matrix
   get_row <- function(i) int_mat[i, ]
 } else {
-  message("  Dataset too large to materialise; reading row-by-row (slower).")
+  message("  Dataset too large to materialise; reading row-by-row.")
   get_row <- function(i) as.numeric(iData(msi)[i, ])
 }
+
+# ── Pre-compute colormap as float RGB (256 × 3) for direct pixel writes ──────
+colors_rgb <- t(col2rgb(colors)) / 255   # 256 × 3, values in [0, 1]
 
 metadata_rows <- vector("list", n_features)
 t_start <- proc.time()[["elapsed"]]
@@ -262,29 +267,38 @@ for (i in seq_along(mz_values)) {
 
   img_data <- get_row(i)
 
-  # Vectorised fill — replaces the 100k-iteration R for-loop
+  # Vectorised fill
   mat <- matrix(NA_real_, nrow = n_rows, ncol = n_cols)
   mat[mat_idx] <- img_data
 
+  # Normalise to [0, 1]
   mat_min <- min(mat, na.rm = TRUE)
   mat_max <- max(mat, na.rm = TRUE)
   if (mat_max > mat_min) {
     mat_norm <- (mat - mat_min) / (mat_max - mat_min)
   } else {
-    mat_norm <- matrix(0, nrow = n_rows, ncol = n_cols)
+    mat_norm <- matrix(0.0, nrow = n_rows, ncol = n_cols)
   }
 
-  png(fpath, width = args$width, height = args$height, bg = "black")
-  par(mar = c(0, 0, 0, 0), oma = c(0, 0, 0, 0))
-  image(t(mat_norm[n_rows:1, ]),
-        col = colors, axes = FALSE, xlab = "", ylab = "",
-        zlim = c(0, 1), asp = 1)
-  dev.off()
+  # Flip y to match image() orientation
+  mat_norm <- mat_norm[n_rows:1L, ]
+
+  # Map each pixel to a colormap index (1..256), NA → black (index 1)
+  cidx <- pmax(1L, pmin(256L, as.integer(mat_norm * 255.0) + 1L))
+  cidx[is.na(cidx)] <- 1L
+
+  # Build height × width × 3 float array and write PNG directly
+  # (avoids opening/closing an R graphics device for every feature)
+  img_arr <- array(
+    c(colors_rgb[cidx, 1L], colors_rgb[cidx, 2L], colors_rgb[cidx, 3L]),
+    dim = c(n_rows, n_cols, 3L)
+  )
+  writePNG(img_arr, fpath)
 
   metadata_rows[[i]] <- data.frame(filename = fname, mz_value = mz_val,
                                    stringsAsFactors = FALSE)
 
-  if (i %% 100 == 0 || i == n_features) {
+  if (i %% 100L == 0L || i == n_features) {
     elapsed  <- proc.time()[["elapsed"]] - t_start
     rate     <- i / elapsed
     eta_min  <- (n_features - i) / rate / 60
