@@ -7,6 +7,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## Unreleased
 
+- feat: session start screen when returning to a partially-annotated dataset — choose Resume, Start from beginning, or Review starred
+- fix: annotation progress bar now tracks live during a session (was using queue buffer size, not actual annotation count)
+- feat: header shows "X left" count during resume mode
+
 ---
 
 ## 2026-03-28
