@@ -10,7 +10,9 @@ services:
       -b 0.0.0.0:8000
       --timeout 120
       --access-logfile -
-    volumes: []  # no hot-reload volume in prod
+    volumes:
+      - ./r-scripts:/app/r-scripts:ro
+      - ./docs:/app/docs:ro
     restart: always
 
   nginx:
