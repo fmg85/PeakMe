@@ -5,6 +5,7 @@ All S3 interactions in the app go through this module.
 To swap storage backends (e.g. Cloudflare R2, GCS), only this file changes.
 """
 import io
+import threading
 import uuid
 
 import boto3
@@ -12,19 +13,20 @@ from botocore.exceptions import ClientError
 
 from app.config import settings
 
-_s3_client = None
+# Per-thread client — boto3 clients are not thread-safe for concurrent calls,
+# so each worker thread in the upload pool gets its own instance.
+_thread_local = threading.local()
 
 
 def get_s3_client():
-    global _s3_client
-    if _s3_client is None:
-        _s3_client = boto3.client(
+    if not hasattr(_thread_local, "s3_client"):
+        _thread_local.s3_client = boto3.client(
             "s3",
             region_name=settings.aws_region,
             aws_access_key_id=settings.aws_access_key_id,
             aws_secret_access_key=settings.aws_secret_access_key,
         )
-    return _s3_client
+    return _thread_local.s3_client
 
 
 def upload_image(data: bytes, dataset_id: uuid.UUID, filename: str) -> str:

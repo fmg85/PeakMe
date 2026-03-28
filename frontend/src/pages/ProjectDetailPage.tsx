@@ -95,6 +95,10 @@ export default function ProjectDetailPage() {
     queryKey: ['datasets', projectId],
     queryFn: () => apiClient.get(`/api/projects/${projectId}/datasets`).then((r) => r.data),
     enabled: !!projectId,
+    refetchInterval: (query) => {
+      const data = query.state.data
+      return data?.some((d) => d.status === 'processing' || d.status === 'pending') ? 3000 : false
+    },
   })
 
   const addLabel = useMutation({
@@ -225,8 +229,8 @@ export default function ProjectDetailPage() {
                         {ds.total_ions.toLocaleString()} ions
                         {ds.sample_type && ` · ${ds.sample_type}`}
                         {ds.status !== 'ready' && (
-                          <span className={` · ${ds.status === 'error' ? 'text-red-400' : 'text-yellow-400'}`}>
-                            {ds.status}
+                          <span className={` · ${ds.status === 'error' ? 'text-red-400' : 'text-yellow-400 animate-pulse'}`}>
+                            {ds.status === 'processing' ? 'processing ions…' : ds.status}
                           </span>
                         )}
                       </p>
@@ -250,7 +254,7 @@ export default function ProjectDetailPage() {
                           </Link>
                         </>
                       )}
-                      {(ds.status === 'error' || ds.status === 'pending') && (
+                      {(ds.status === 'error' || ds.status === 'pending' || ds.status === 'processing') && (
                         <button
                           onClick={() => deleteDataset.mutate(ds.id)}
                           className="text-gray-600 hover:text-red-400 transition-colors text-sm"

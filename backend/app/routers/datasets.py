@@ -1,10 +1,10 @@
 import uuid
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_db
+from app.database import AsyncSessionLocal, get_db
 from app.deps import CurrentUser
 from app.models.annotation import Annotation
 from app.models.dataset import Dataset
@@ -17,6 +17,25 @@ from app.services.storage import delete_dataset_images
 router = APIRouter(tags=["datasets"])
 
 MAX_ZIP_SIZE = 2 * 1024 * 1024 * 1024  # 2 GB
+
+
+async def _ingest_background(zip_bytes: bytes, dataset_id: uuid.UUID) -> None:
+    """Run ingestion in a fresh DB session after the HTTP response is sent."""
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(Dataset).where(Dataset.id == dataset_id))
+        dataset = result.scalar_one()
+        try:
+            await ingest_zip(zip_bytes, dataset, db)
+        except IngestError as e:
+            dataset.status = "error"
+            dataset.error_msg = str(e)
+            db.add(dataset)
+            await db.commit()
+        except Exception:
+            dataset.status = "error"
+            dataset.error_msg = "Unexpected error during ingestion."
+            db.add(dataset)
+            await db.commit()
 
 
 @router.get("/api/projects/{project_id}/datasets", response_model=list[DatasetOut])
@@ -50,8 +69,9 @@ async def list_datasets(
     ]
 
 
-@router.post("/api/datasets/upload", response_model=DatasetOut, status_code=status.HTTP_201_CREATED)
+@router.post("/api/datasets/upload", response_model=DatasetOut, status_code=status.HTTP_202_ACCEPTED)
 async def upload_dataset(
+    background_tasks: BackgroundTasks,
     current_user: CurrentUser,
     project_id: uuid.UUID = Form(...),
     name: str = Form(...),
@@ -64,37 +84,26 @@ async def upload_dataset(
     if not result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Project not found")
 
+    # Read and validate file size before creating the DB record
+    zip_bytes = await file.read()
+    if len(zip_bytes) > MAX_ZIP_SIZE:
+        raise HTTPException(status_code=422, detail="ZIP file exceeds 2 GB limit.")
+
+    # Create the dataset record immediately so the UI can show "processing"
     dataset = Dataset(
         project_id=project_id,
         name=name,
         description=description,
         sample_type=sample_type,
-        status="pending",
+        status="processing",
     )
     db.add(dataset)
     await db.commit()
     await db.refresh(dataset)
 
-    try:
-        zip_bytes = await file.read()
-        if len(zip_bytes) > MAX_ZIP_SIZE:
-            raise IngestError("ZIP file exceeds 2 GB limit.")
+    # Kick off ingestion after the response is sent
+    background_tasks.add_task(_ingest_background, zip_bytes, dataset.id)
 
-        ion_count = await ingest_zip(zip_bytes, dataset, db)
-    except IngestError as e:
-        dataset.status = "error"
-        dataset.error_msg = str(e)
-        db.add(dataset)
-        await db.commit()
-        raise HTTPException(status_code=422, detail=str(e))
-    except Exception as e:
-        dataset.status = "error"
-        dataset.error_msg = "Unexpected error during ingestion."
-        db.add(dataset)
-        await db.commit()
-        raise HTTPException(status_code=500, detail="Ingestion failed unexpectedly.")
-
-    await db.refresh(dataset)
     return dataset
 
 

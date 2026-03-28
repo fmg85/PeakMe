@@ -2,13 +2,14 @@
 Dataset ingestion service.
 
 Accepts a ZIP file (PNGs + metadata.csv), validates the contents,
-uploads images to S3, and creates Ion records in the database.
+uploads images to S3 in parallel, and creates Ion records in the database.
 """
+import asyncio
 import csv
 import io
-import tempfile
 import uuid
 import zipfile
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +17,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.dataset import Dataset
 from app.models.ion import Ion
 from app.services.storage import upload_image
+
+# Max concurrent S3 uploads per ingestion job
+_S3_WORKERS = 20
 
 
 class IngestError(Exception):
@@ -28,7 +32,7 @@ async def ingest_zip(
     db: AsyncSession,
 ) -> int:
     """
-    Process a ZIP upload, upload PNGs to S3, create Ion rows.
+    Process a ZIP upload, upload PNGs to S3 in parallel, create Ion rows.
     Returns the number of ions ingested.
     Raises IngestError on validation failures.
     """
@@ -44,7 +48,7 @@ async def ingest_zip(
     if not metadata_candidates:
         raise IngestError(
             "metadata.csv not found in ZIP. "
-            "See docs/r-export-workflow.md for the required format."
+            "See the Instructions page for the required format."
         )
     metadata_path = metadata_candidates[0]
     base_dir = str(Path(metadata_path).parent)
@@ -64,21 +68,9 @@ async def ingest_zip(
     if not rows:
         raise IngestError("metadata.csv is empty — no ions to ingest.")
 
-    # Validate all filenames exist in ZIP before starting upload
+    # Validate all filenames exist in ZIP before starting any upload
     zip_files = set(names)
-    for row in rows:
-        fname = row["filename"].strip()
-        candidate_paths = [
-            fname,
-            f"{base_dir}/{fname}" if base_dir != "." else fname,
-        ]
-        if not any(p in zip_files for p in candidate_paths):
-            raise IngestError(
-                f"File '{fname}' listed in metadata.csv not found in ZIP."
-            )
-
-    # Upload and create Ion records
-    ions = []
+    parsed: list[tuple[str, float, str]] = []  # (fname, mz, zip_path)
     for i, row in enumerate(rows):
         fname = row["filename"].strip()
         try:
@@ -86,21 +78,41 @@ async def ingest_zip(
         except (ValueError, KeyError):
             raise IngestError(f"Invalid mz_value in row {i + 2}: '{row.get('mz_value')}'")
 
-        # Find file in zip (handles subdirectory or flat)
         zip_path = fname
-        if f"{base_dir}/{fname}" in zip_files and base_dir != ".":
-            zip_path = f"{base_dir}/{fname}"
+        candidate = f"{base_dir}/{fname}"
+        if candidate in zip_files and base_dir != ".":
+            zip_path = candidate
+        elif fname not in zip_files:
+            raise IngestError(f"File '{fname}' listed in metadata.csv not found in ZIP.")
 
+        parsed.append((fname, mz, zip_path))
+
+    # ── Parallel S3 uploads ────────────────────────────────────────────────────
+    # boto3 is synchronous; run uploads in a thread pool so they happen
+    # concurrently without blocking the async event loop.
+    loop = asyncio.get_running_loop()
+
+    def _upload(item: tuple[str, float, str]) -> tuple[str, float, str]:
+        fname, mz, zip_path = item
         img_bytes = zf.read(zip_path)
-        image_key = upload_image(img_bytes, dataset.id, fname)
+        key = upload_image(img_bytes, dataset.id, fname)
+        return (fname, mz, key)
 
-        ions.append(Ion(
+    with ThreadPoolExecutor(max_workers=_S3_WORKERS) as pool:
+        results = await asyncio.gather(
+            *[loop.run_in_executor(pool, _upload, item) for item in parsed]
+        )
+
+    # ── Bulk DB insert ─────────────────────────────────────────────────────────
+    ions = [
+        Ion(
             dataset_id=dataset.id,
             mz_value=mz,
-            image_key=image_key,
+            image_key=key,
             sort_order=i,
-        ))
-
+        )
+        for i, (fname, mz, key) in enumerate(results)
+    ]
     db.add_all(ions)
     dataset.total_ions = len(ions)
     dataset.status = "ready"
