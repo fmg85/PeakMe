@@ -87,33 +87,33 @@ async def ingest_zip(
 
         parsed.append((fname, mz, zip_path))
 
-    # ── Parallel S3 uploads ────────────────────────────────────────────────────
-    loop = asyncio.get_running_loop()
-
-    def _upload(item: tuple[str, float, str]) -> tuple[str, float, str, str | None]:
-        fname, mz, zip_path = item
+    # ── Pre-read all file bytes from the ZIP (single-threaded, thread-safe) ──────
+    # ZipFile is not thread-safe; extract all data before spawning upload workers.
+    upload_items: list[tuple[str, float, bytes, str | None, bytes | None]] = []
+    for fname, mz, zip_path in parsed:
         img_bytes = zf.read(zip_path)
-        key = upload_image(img_bytes, dataset.id, fname)
-
-        # Upload TIC spectrum PNG if present (named <base>_tic.png)
         tic_fname = fname.replace(".png", "_tic.png")
-        tic_zip_path = tic_fname
         candidate = f"{base_dir}/{tic_fname}"
         if candidate in zip_files and base_dir != ".":
-            tic_zip_path = candidate
-        elif tic_fname not in zip_files:
-            tic_zip_path = None
+            tic_bytes: bytes | None = zf.read(candidate)
+        elif tic_fname in zip_files:
+            tic_bytes = zf.read(tic_fname)
+        else:
+            tic_bytes = None
+        upload_items.append((fname, mz, img_bytes, tic_fname if tic_bytes is not None else None, tic_bytes))
 
-        tic_key: str | None = None
-        if tic_zip_path:
-            tic_bytes = zf.read(tic_zip_path)
-            tic_key = upload_image(tic_bytes, dataset.id, tic_fname)
+    # ── Parallel S3 uploads (no ZIP access in threads) ─────────────────────────
+    loop = asyncio.get_running_loop()
 
+    def _upload(item: tuple[str, float, bytes, str | None, bytes | None]) -> tuple[str, float, str, str | None]:
+        fname, mz, img_bytes, tic_fname, tic_bytes = item
+        key = upload_image(img_bytes, dataset.id, fname)
+        tic_key = upload_image(tic_bytes, dataset.id, tic_fname) if tic_bytes is not None and tic_fname else None
         return (fname, mz, key, tic_key)
 
     with ThreadPoolExecutor(max_workers=_S3_WORKERS) as pool:
         results = await asyncio.gather(
-            *[loop.run_in_executor(pool, _upload, item) for item in parsed]
+            *[loop.run_in_executor(pool, _upload, item) for item in upload_items]
         )
 
     # ── Bulk DB insert ─────────────────────────────────────────────────────────
