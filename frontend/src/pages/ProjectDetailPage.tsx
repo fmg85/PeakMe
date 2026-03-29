@@ -95,6 +95,7 @@ export default function ProjectDetailPage() {
     queryKey: ['datasets', projectId],
     queryFn: () => apiClient.get(`/api/projects/${projectId}/datasets`).then((r) => r.data),
     enabled: !!projectId,
+    refetchOnWindowFocus: true,
     refetchInterval: (query) => {
       const data = query.state.data
       return data?.some((d) => d.status === 'processing' || d.status === 'pending') ? 3000 : false

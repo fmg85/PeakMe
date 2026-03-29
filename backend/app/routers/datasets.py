@@ -117,7 +117,14 @@ async def get_dataset(
     dataset = result.scalar_one_or_none()
     if not dataset:
         raise HTTPException(status_code=404, detail="Dataset not found")
-    return dataset
+
+    count_result = await db.execute(
+        select(func.count(Annotation.id))
+        .join(Ion, Ion.id == Annotation.ion_id)
+        .where(Ion.dataset_id == dataset_id, Annotation.user_id == current_user.id)
+    )
+    my_count = count_result.scalar() or 0
+    return DatasetOut.model_validate(dataset).model_copy(update={"my_annotation_count": my_count})
 
 
 @router.delete("/api/datasets/{dataset_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useDrag } from '@use-gesture/react'
 import apiClient from '../lib/apiClient'
 import { useAnnotationQueue } from '../hooks/useAnnotationQueue'
@@ -23,6 +23,7 @@ export default function AnnotatePage() {
   const { projectId } = useParams<{ projectId: string }>()
   const [searchParams] = useSearchParams()
   const datasetId = searchParams.get('dataset') ?? ''
+  const queryClient = useQueryClient()
 
   const [anim, setAnim] = useState<AnimDirection>(null)
   const [zoomed, setZoomed] = useState(false)
@@ -260,7 +261,11 @@ export default function AnnotatePage() {
             </p>
             <div className="flex flex-col gap-2 items-center">
               <button
-                onClick={() => { setSessionStarted(false); setSessionAnnotations(0) }}
+                onClick={() => {
+                  setSessionStarted(false)
+                  setSessionAnnotations(0)
+                  queryClient.invalidateQueries({ queryKey: ['dataset', datasetId] })
+                }}
                 className="w-48 rounded-lg bg-brand-orange px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-red transition-colors"
               >
                 Back to session menu
