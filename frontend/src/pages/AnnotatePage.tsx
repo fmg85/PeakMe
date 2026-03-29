@@ -30,6 +30,12 @@ export default function AnnotatePage() {
   const [strategy, setStrategy] = useState<'unannotated_first' | 'starred_first' | 'all'>('unannotated_first')
   const [sessionStarted, setSessionStarted] = useState(false)
   const [sessionAnnotations, setSessionAnnotations] = useState(0)
+  // Snapshot of my_annotation_count at the moment the user clicks Resume/Start.
+  // We freeze it here so that React Query background refetches mid-session
+  // can't corrupt the counter (if my_annotation_count updated to include session
+  // annotations, "annotated = my_annotation_count + sessionAnnotations" would
+  // double-count and "remaining" would show a wrong non-zero value at exhaustion).
+  const [baselineAnnotations, setBaselineAnnotations] = useState(0)
   const [undoStack, setUndoStack] = useState<IonQueueItem[]>([])  // full items, most-recent last
 
   // Drag state for swipe gesture
@@ -137,13 +143,21 @@ export default function AnnotatePage() {
   }, [project, annotate, toggleStar, undo])
 
   const total = dataset?.total_ions ?? 0
-  // For resume mode: show overall annotation progress.
-  // For "all" / "starred" modes: show position within this review session only
-  // (starting from 1), so the counter doesn't jump to 500+ on the first swipe.
+  // For resume mode: show overall annotation progress using the frozen baseline
+  // (captured at session start) plus new annotations made this session.
+  // For "all" / "starred" modes: show position within this review session only.
   const annotated = strategy === 'unannotated_first'
-    ? (dataset?.my_annotation_count ?? 0) + sessionAnnotations
+    ? baselineAnnotations + sessionAnnotations
     : sessionAnnotations
-  const remaining_unannotated = Math.max(0, total - (dataset?.my_annotation_count ?? 0) - (strategy === 'unannotated_first' ? sessionAnnotations : 0))
+  const remaining_unannotated = Math.max(0, total - baselineAnnotations - (strategy === 'unannotated_first' ? sessionAnnotations : 0))
+
+  // When the queue exhausts, refresh the dataset so the header and session-start
+  // screen show the true my_annotation_count for next time.
+  useEffect(() => {
+    if (exhausted && sessionStarted) {
+      queryClient.invalidateQueries({ queryKey: ['dataset', datasetId] })
+    }
+  }, [exhausted, sessionStarted, queryClient, datasetId])
   const progress = total > 0 ? Math.round((annotated / total) * 100) : 0
 
   // Derived drag values
@@ -206,7 +220,7 @@ export default function AnnotatePage() {
 
             <div className="space-y-3">
               <button
-                onClick={() => { setStrategy('unannotated_first'); setSessionStarted(true) }}
+                onClick={() => { setBaselineAnnotations(dataset.my_annotation_count); setStrategy('unannotated_first'); setSessionStarted(true) }}
                 className="w-full rounded-xl bg-brand-orange px-4 py-3 text-left font-medium text-white hover:bg-brand-red transition-colors"
               >
                 <div>{isFirstVisit ? '▶ Start annotating' : '▶ Resume'}</div>
@@ -219,7 +233,7 @@ export default function AnnotatePage() {
               {!isFirstVisit && (
                 <>
                   <button
-                    onClick={() => { setStrategy('all'); setSessionStarted(true) }}
+                    onClick={() => { setBaselineAnnotations(dataset.my_annotation_count); setStrategy('all'); setSessionStarted(true) }}
                     className="w-full rounded-xl bg-gray-800 px-4 py-3 text-left font-medium text-white hover:bg-gray-700 transition-colors"
                   >
                     <div>↩ Start from the beginning</div>
@@ -228,7 +242,7 @@ export default function AnnotatePage() {
                     </div>
                   </button>
                   <button
-                    onClick={() => { setStrategy('starred_first'); setSessionStarted(true) }}
+                    onClick={() => { setBaselineAnnotations(dataset.my_annotation_count); setStrategy('starred_first'); setSessionStarted(true) }}
                     className="w-full rounded-xl bg-gray-800 px-4 py-3 text-left font-medium text-yellow-400 hover:bg-gray-700 transition-colors"
                   >
                     <div>★ Review starred only</div>
@@ -282,7 +296,7 @@ export default function AnnotatePage() {
             </h2>
             <p className="text-gray-400">
               {strategy === 'unannotated_first'
-                ? `You've annotated all ${dataset?.total_ions} ions in this dataset.`
+                ? `You've annotated all ${total.toLocaleString()} ions in this dataset.`
                 : strategy === 'starred_first'
                 ? 'No starred ions found.'
                 : 'You reached the end of the dataset.'}
@@ -292,6 +306,7 @@ export default function AnnotatePage() {
                 onClick={() => {
                   setSessionStarted(false)
                   setSessionAnnotations(0)
+                  setBaselineAnnotations(0)
                   setUndoStack([])
                   queryClient.invalidateQueries({ queryKey: ['dataset', datasetId] })
                 }}
