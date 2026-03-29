@@ -7,6 +7,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## Unreleased
 
+---
+
+## 2026-03-29
+
 - feat: session start screen when returning to a partially-annotated dataset — choose Resume, Start from beginning, or Review starred
 - fix: annotation progress bar now tracks live during a session (was using queue buffer size, not actual annotation count)
 - feat: header shows "X left" count during resume mode
@@ -16,8 +20,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - feat: new card fades in smoothly after each annotation
 - fix: R export — ion images were vertically flipped vs. old script (writePNG row-1=top convention; removed incorrect y-flip)
 - fix: undo now always returns to exactly the ion that was annotated, not a potentially random queue position
-
----
 
 ## 2026-03-28
 
