@@ -335,8 +335,10 @@ export default function AnnotatePage() {
               <SwipeEdge dir="up"    label={swipeMap.up}    active={dragDir === 'up'}    committed={committed && dragDir === 'up'}    opacity={(dragDir === 'up'    && isDragging) ? Math.min(1, (dragDist - SWIPE_HINT) / (SWIPE_COMMIT - SWIPE_HINT)) : 0} />
               <SwipeEdge dir="down"  label={swipeMap.down}  active={dragDir === 'down'}  committed={committed && dragDir === 'down'}  opacity={(dragDir === 'down'  && isDragging) ? Math.min(1, (dragDist - SWIPE_HINT) / (SWIPE_COMMIT - SWIPE_HINT)) : 0} />
 
-              {/* Ion image card */}
+              {/* Ion image card — key={current.id} forces a fresh DOM element per ion so
+                  React never reuses the element from the previous card's fly-off animation. */}
               <div
+                key={current.id}
                 {...bind()}
                 className="absolute inset-0 rounded-xl overflow-hidden shadow-2xl"
                 style={cardStyle}
