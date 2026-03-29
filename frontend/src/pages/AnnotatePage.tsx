@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useDrag } from '@use-gesture/react'
 import apiClient from '../lib/apiClient'
 import { useAnnotationQueue } from '../hooks/useAnnotationQueue'
-import type { Dataset, LabelOption, Project } from '../lib/types'
+import type { Dataset, IonQueueItem, LabelOption, Project } from '../lib/types'
 
 type AnimDirection = 'left' | 'right' | 'up' | 'down' | null
 type SwipeDir = 'left' | 'right' | 'up' | 'down'
@@ -30,7 +30,7 @@ export default function AnnotatePage() {
   const [strategy, setStrategy] = useState<'unannotated_first' | 'starred_first' | 'all'>('unannotated_first')
   const [sessionStarted, setSessionStarted] = useState(false)
   const [sessionAnnotations, setSessionAnnotations] = useState(0)
-  const [undoStack, setUndoStack] = useState<string[]>([])  // ionIds, most-recent last
+  const [undoStack, setUndoStack] = useState<IonQueueItem[]>([])  // full items, most-recent last
 
   // Drag state for swipe gesture
   const [dragXY, setDragXY] = useState<[number, number]>([0, 0])
@@ -47,7 +47,7 @@ export default function AnnotatePage() {
     enabled: !!datasetId,
   })
 
-  const { current, remaining, advance, updateCurrent, exhausted, forceReload } = useAnnotationQueue({
+  const { current, remaining, advance, updateCurrent, exhausted, forceReload, prependItem } = useAnnotationQueue({
     datasetId,
     strategy,
   })
@@ -72,11 +72,11 @@ export default function AnnotatePage() {
 
   const annotate = useCallback(async (label: LabelOption, direction: AnimDirection = 'right') => {
     if (!current) return
-    const ionId = current.id
+    const snapshot = current  // capture before async
     setAnim(direction)
     try {
-      await apiClient.post(`/api/ions/${ionId}/annotate`, { label_option_id: label.id })
-      setUndoStack((s) => [...s, ionId])
+      await apiClient.post(`/api/ions/${snapshot.id}/annotate`, { label_option_id: label.id })
+      setUndoStack((s) => [...s, snapshot])
       setSessionAnnotations((n) => n + 1)
     } catch {
       setAnim(null)
@@ -93,12 +93,14 @@ export default function AnnotatePage() {
 
   const undo = useCallback(async () => {
     if (undoStack.length === 0) return
-    const ionId = undoStack[undoStack.length - 1]
+    const item = undoStack[undoStack.length - 1]
     setUndoStack((s) => s.slice(0, -1))
     setSessionAnnotations((n) => Math.max(0, n - 1))
-    await apiClient.delete(`/api/ions/${ionId}/annotate`)
-    forceReload()
-  }, [undoStack, forceReload])
+    await apiClient.delete(`/api/ions/${item.id}/annotate`)
+    // Prepend the undone ion back to the front of the queue (no reload needed).
+    // This always lands on exactly the ion that was undone, regardless of strategy.
+    prependItem({ ...item, annotation: null })
+  }, [undoStack, prependItem])
 
   // Swipe gesture
   const bind = useDrag(({ down, movement: [mx, my], velocity: [vx, vy], cancel }) => {

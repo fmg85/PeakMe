@@ -280,9 +280,6 @@ for (i in seq_along(mz_values)) {
     mat_norm <- matrix(0.0, nrow = n_rows, ncol = n_cols)
   }
 
-  # Flip y to match image() orientation
-  mat_norm <- mat_norm[n_rows:1L, ]
-
   # Map each pixel to a colormap index (1..256), NA → black (index 1)
   cidx <- pmax(1L, pmin(256L, as.integer(mat_norm * 255.0) + 1L))
   cidx[is.na(cidx)] <- 1L

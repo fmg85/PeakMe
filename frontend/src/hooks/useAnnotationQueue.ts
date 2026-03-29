@@ -66,6 +66,10 @@ export function useAnnotationQueue({ datasetId, strategy = 'unannotated_first' }
     setQueue((prev) => prev.slice(1))
   }, [])
 
+  const prependItem = useCallback((item: IonQueueItem) => {
+    setQueue((prev) => [item, ...prev])
+  }, [])
+
   const updateCurrent = useCallback((updater: (item: IonQueueItem) => IonQueueItem) => {
     setQueue((prev) => {
       if (prev.length === 0) return prev
@@ -73,7 +77,7 @@ export function useAnnotationQueue({ datasetId, strategy = 'unannotated_first' }
     })
   }, [])
 
-  return { current, remaining, advance, updateCurrent, exhausted, forceReload }
+  return { current, remaining, advance, updateCurrent, exhausted, forceReload, prependItem }
 }
 
 function prefetchImage(url: string) {

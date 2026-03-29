@@ -14,6 +14,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - fix: swipe animation — card now fully exits before next card appears (timeout was 250ms, transition 300ms; fixed to 320ms)
 - feat: ion image is now significantly larger — fills available screen height instead of fixed vmin size
 - feat: new card fades in smoothly after each annotation
+- fix: R export — ion images were vertically flipped vs. old script (writePNG row-1=top convention; removed incorrect y-flip)
+- fix: undo now always returns to exactly the ion that was annotated, not a potentially random queue position
 
 ---
 
