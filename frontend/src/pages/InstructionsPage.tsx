@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 
 function CodeBlock({ children }: { children: string }) {
@@ -8,11 +9,26 @@ function CodeBlock({ children }: { children: string }) {
   )
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function CollapsibleSection({
+  title,
+  children,
+  defaultOpen = true,
+}: {
+  title: string
+  children: React.ReactNode
+  defaultOpen?: boolean
+}) {
+  const [open, setOpen] = useState(defaultOpen)
   return (
-    <section className="space-y-3">
-      <h2 className="text-lg font-semibold text-white border-b border-gray-800 pb-2">{title}</h2>
-      {children}
+    <section className="rounded-xl border border-gray-800 overflow-hidden">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between px-5 py-4 text-left bg-gray-900 hover:bg-gray-800/80 transition-colors"
+      >
+        <span className="text-base font-semibold text-white">{title}</span>
+        <span className="text-gray-500 text-lg leading-none select-none">{open ? '−' : '+'}</span>
+      </button>
+      {open && <div className="px-5 py-5 space-y-3 bg-gray-950">{children}</div>}
     </section>
   )
 }
@@ -83,6 +99,100 @@ function ImportOptionTable() {
   )
 }
 
+type StepColor = 'orange' | 'purple'
+
+interface WorkflowStep {
+  num: string
+  label: string
+  sub: string
+  color: StepColor
+}
+
+function WorkflowDiagram() {
+  const steps: WorkflowStep[] = [
+    { num: '1', label: 'Install', sub: 'R packages', color: 'orange' },
+    { num: '2', label: 'Export', sub: 'run export script', color: 'orange' },
+    { num: '3', label: 'ZIP', sub: 'bundle output', color: 'orange' },
+    { num: '4', label: 'Upload', sub: 'to PeakMe', color: 'orange' },
+    { num: '5', label: 'Annotate', sub: 'swipe ions', color: 'purple' },
+    { num: '6', label: 'Export CSV', sub: 'from PeakMe', color: 'purple' },
+    { num: '7', label: 'Import', sub: 'run import script', color: 'purple' },
+    { num: '8', label: 'Analyse', sub: 'MSE_clean in R', color: 'purple' },
+  ]
+
+  const colorClasses: Record<StepColor, { ring: string; bg: string; num: string; sub: string }> = {
+    orange: {
+      ring: 'border-brand-orange/50',
+      bg: 'bg-brand-orange/10',
+      num: 'text-brand-orange',
+      sub: 'text-brand-orange/70',
+    },
+    purple: {
+      ring: 'border-brand-purple/50',
+      bg: 'bg-brand-purple/10',
+      num: 'text-brand-purple',
+      sub: 'text-brand-purple/70',
+    },
+  }
+
+  return (
+    <div className="rounded-xl bg-gray-900 p-6 space-y-5">
+      <div>
+        <h2 className="text-lg font-semibold text-white">End-to-end workflow</h2>
+        <p className="mt-1 text-sm text-gray-400">
+          PeakMe does not process raw MSI files server-side. You render ion images locally in R,
+          upload a ZIP for annotation, then import labels back into R for analysis.
+        </p>
+      </div>
+
+      {/* Diagram */}
+      <div className="overflow-x-auto pb-1">
+        <div className="flex items-center gap-0 min-w-max">
+          {steps.map((step, i) => {
+            const c = colorClasses[step.color]
+            const isPartBoundary = i === 3  // between step 4 and 5
+            return (
+              <div key={step.num} className="flex items-center">
+                {/* Arrow / divider */}
+                {i > 0 && (
+                  isPartBoundary ? (
+                    <div className="flex items-center gap-0.5 mx-2">
+                      <div className="w-3 h-px bg-gray-700" />
+                      <div className="w-px h-6 bg-gray-700" />
+                      <div className="w-3 h-px bg-gray-700" />
+                    </div>
+                  ) : (
+                    <div className="w-5 flex items-center justify-center text-gray-600 text-sm select-none">›</div>
+                  )
+                )}
+
+                {/* Step box */}
+                <div className={`flex flex-col items-center gap-0.5 rounded-lg border ${c.ring} ${c.bg} px-3 py-2.5 w-20 text-center`}>
+                  <span className={`text-xs font-bold ${c.num}`}>Step {step.num}</span>
+                  <span className="text-xs font-semibold text-white leading-tight">{step.label}</span>
+                  <span className={`text-[10px] leading-tight ${c.sub}`}>{step.sub}</span>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Legend */}
+      <div className="flex items-center gap-6 text-xs text-gray-500">
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded-sm bg-brand-orange/20 border border-brand-orange/40" />
+          <span>Part 1 — Cardinal → PeakMe</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded-sm bg-brand-purple/20 border border-brand-purple/40" />
+          <span>Part 2 — PeakMe → R</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function InstructionsPage() {
   const download = (filename: string) => {
     const a = document.createElement('a')
@@ -114,67 +224,30 @@ export default function InstructionsPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-3xl px-4 py-10 space-y-10">
+      <main className="mx-auto max-w-3xl px-4 py-10 space-y-4">
 
-        {/* Overview */}
-        <div className="rounded-xl bg-gray-900 p-6 space-y-4">
-          <h2 className="text-lg font-semibold text-white">Overview</h2>
-          <p className="text-gray-300">
-            PeakMe does not process raw mass spectrometry files server-side. Instead, you render
-            ion images locally using Cardinal (R), upload a ZIP of PNGs to PeakMe for annotation,
-            then import the labels back into R for downstream analysis.
-          </p>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="rounded-lg border border-brand-orange/30 bg-brand-orange/5 p-4 space-y-2">
-              <p className="text-sm font-semibold text-brand-orange">Part 1 — Export (R → PeakMe)</p>
-              <div className="flex flex-col gap-1 text-sm text-gray-400">
-                {['1. Install R dependencies', '2. Run export_cardinal_pngs.R', '3. Zip the output folder', '4. Upload the ZIP to PeakMe'].map((step) => (
-                  <div key={step} className="flex items-center gap-2">
-                    <span className="text-brand-orange">→</span>
-                    <span>{step}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="rounded-lg border border-brand-purple/30 bg-brand-purple/5 p-4 space-y-2">
-              <p className="text-sm font-semibold text-brand-purple">Part 2 — Import (PeakMe → R)</p>
-              <div className="flex flex-col gap-1 text-sm text-gray-400">
-                {['5. Annotate in PeakMe', '6. Export annotations CSV', '7. Run peakme_import.R', '8. Use MSE_process + MSE_clean'].map((step) => (
-                  <div key={step} className="flex items-center gap-2">
-                    <span className="text-brand-purple">→</span>
-                    <span>{step}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+        <WorkflowDiagram />
+
+        {/* ── PART 1 label ── */}
+        <div className="rounded-lg border border-brand-orange/20 px-5 py-2.5">
+          <span className="text-xs font-semibold uppercase tracking-widest text-brand-orange">Part 1 — Export (Cardinal → PeakMe)</span>
         </div>
 
-        {/* ── PART 1 ── */}
-        <div className="rounded-lg border border-brand-orange/20 px-1">
-          <div className="px-4 py-3">
-            <span className="text-xs font-semibold uppercase tracking-widest text-brand-orange">Part 1 — Export (Cardinal → PeakMe)</span>
-          </div>
-        </div>
-
-        {/* Step 1 */}
-        <Section title="Step 1 — Install R Dependencies">
+        <CollapsibleSection title="Step 1 — Install R Dependencies">
           <p className="text-sm text-gray-400">In R or RStudio:</p>
           <CodeBlock>{`if (!requireNamespace("BiocManager", quietly = TRUE))
   install.packages("BiocManager")
 
 BiocManager::install("Cardinal")
 install.packages(c("viridis", "optparse", "png"))`}</CodeBlock>
-        </Section>
+        </CollapsibleSection>
 
-        {/* Step 2 */}
-        <Section title="Step 2 — Run the Export Script">
+        <CollapsibleSection title="Step 2 — Run the Export Script">
           <p className="text-sm text-gray-400">
             The script works with any <code className="rounded bg-gray-800 px-1 text-green-300">MSImagingExperiment</code> — raw read-in, peak-picked, aligned, filtered, whatever state your data is in.
           </p>
 
-          {/* RStudio block */}
-          <div className="mt-4 rounded-lg border border-brand-purple/40 bg-brand-purple/10 p-4 space-y-2">
+          <div className="mt-2 rounded-lg border border-brand-purple/40 bg-brand-purple/10 p-4 space-y-2">
             <p className="text-sm font-semibold text-brand-purple">RStudio (Windows or Mac) — recommended</p>
             <ol className="text-sm text-gray-300 space-y-1 list-decimal list-inside">
               <li>Open <code className="rounded bg-gray-800 px-1 text-green-300">export_cardinal_pngs.R</code> in RStudio</li>
@@ -214,12 +287,11 @@ Rscript export_cardinal_pngs.R \\
   --output ./peakme_export \\
   --zip`}</CodeBlock>
 
-          <h3 className="text-sm font-medium text-gray-300 mt-4">All options:</h3>
+          <h3 className="text-sm font-medium text-gray-300 mt-2">All options:</h3>
           <OptionTable />
-        </Section>
+        </CollapsibleSection>
 
-        {/* Step 3 */}
-        <Section title="Step 3 — Output Format">
+        <CollapsibleSection title="Step 3 — Output Format">
           <p className="text-sm text-gray-400">The script produces:</p>
           <CodeBlock>{`peakme_export/
   metadata.csv          ← required by PeakMe
@@ -232,10 +304,9 @@ Rscript export_cardinal_pngs.R \\
           <CodeBlock>{`filename,mz_value
 798.5432.png,798.5432
 799.1201.png,799.1201`}</CodeBlock>
-        </Section>
+        </CollapsibleSection>
 
-        {/* Step 4 */}
-        <Section title="Step 4 — Upload to PeakMe">
+        <CollapsibleSection title="Step 4 — Upload to PeakMe">
           <ol className="space-y-2 text-sm text-gray-300 list-decimal list-inside">
             <li>If you used <code className="rounded bg-gray-800 px-1 text-green-300">--zip</code>, a <code className="rounded bg-gray-800 px-1 text-green-300">peakme_export.zip</code> was created automatically.</li>
             <li>
@@ -244,17 +315,14 @@ Rscript export_cardinal_pngs.R \\
             </li>
             <li>Go to your PeakMe project → <strong className="text-white">Upload dataset (ZIP)</strong> → upload the ZIP.</li>
           </ol>
-        </Section>
+        </CollapsibleSection>
 
-        {/* ── PART 2 ── */}
-        <div className="rounded-lg border border-brand-purple/20 px-1 mt-8">
-          <div className="px-4 py-3">
-            <span className="text-xs font-semibold uppercase tracking-widest text-brand-purple">Part 2 — Import (PeakMe → R)</span>
-          </div>
+        {/* ── PART 2 label ── */}
+        <div className="rounded-lg border border-brand-purple/20 px-5 py-2.5 mt-6">
+          <span className="text-xs font-semibold uppercase tracking-widest text-brand-purple">Part 2 — Import (PeakMe → R)</span>
         </div>
 
-        {/* Step 5 */}
-        <Section title="Step 5 — Export Annotations from PeakMe">
+        <CollapsibleSection title="Step 5 — Export Annotations from PeakMe">
           <p className="text-sm text-gray-400">
             Once annotation is complete, download the CSV from PeakMe:
           </p>
@@ -266,15 +334,14 @@ Rscript export_cardinal_pngs.R \\
           <p className="text-sm text-gray-400 mt-2">
             The CSV contains one row per annotated ion with columns: <code className="rounded bg-gray-800 px-1 text-green-300">mz_value</code>, <code className="rounded bg-gray-800 px-1 text-green-300">label_name</code>, <code className="rounded bg-gray-800 px-1 text-green-300">starred</code>, <code className="rounded bg-gray-800 px-1 text-green-300">confidence</code>, <code className="rounded bg-gray-800 px-1 text-green-300">annotator</code>, and timestamps.
           </p>
-        </Section>
+        </CollapsibleSection>
 
-        {/* Step 6 */}
-        <Section title="Step 6 — Run the Import Script">
+        <CollapsibleSection title="Step 6 — Run the Import Script">
           <p className="text-sm text-gray-400">
             <code className="rounded bg-gray-800 px-1 text-green-300">peakme_import.R</code> reads the CSV, matches each annotation back to the correct m/z feature in your <code className="rounded bg-gray-800 px-1 text-green-300">MSImagingExperiment</code>, and creates a filtered object ready for downstream analysis.
           </p>
 
-          <div className="mt-4 rounded-lg border border-brand-purple/40 bg-brand-purple/10 p-4 space-y-2">
+          <div className="mt-2 rounded-lg border border-brand-purple/40 bg-brand-purple/10 p-4 space-y-2">
             <p className="text-sm font-semibold text-brand-purple">RStudio — recommended</p>
             <ol className="text-sm text-gray-300 space-y-1 list-decimal list-inside">
               <li>Make sure your <code className="rounded bg-gray-800 px-1 text-green-300">MSImagingExperiment</code> is loaded in the session (same object you exported from)</li>
@@ -302,10 +369,9 @@ MSE_clean   # use this for downstream analysis, dimensionality reduction, etc.`}
 
           <h3 className="text-sm font-medium text-gray-300 mt-4">Config reference:</h3>
           <ImportOptionTable />
-        </Section>
+        </CollapsibleSection>
 
-        {/* Tips */}
-        <Section title="Tips">
+        <CollapsibleSection title="Tips" defaultOpen={false}>
           <ul className="space-y-3 text-sm text-gray-300">
             <li className="flex gap-2">
               <span className="text-brand-orange flex-shrink-0">•</span>
@@ -335,7 +401,7 @@ MSE_clean   # use this for downstream analysis, dimensionality reduction, etc.`}
               </span>
             </li>
           </ul>
-        </Section>
+        </CollapsibleSection>
 
       </main>
     </div>
