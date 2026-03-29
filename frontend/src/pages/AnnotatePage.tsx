@@ -59,6 +59,14 @@ export default function AnnotatePage() {
     }
   }, [dataset, sessionStarted])
 
+  // Invalidate the project's dataset list when leaving, so ProjectDetailPage
+  // always shows fresh annotation counts without a manual refresh
+  useEffect(() => {
+    return () => {
+      queryClient.invalidateQueries({ queryKey: ['datasets', projectId] })
+    }
+  }, [queryClient, projectId])
+
   // Build swipe direction → label map
   const swipeMap = (project?.label_options ?? []).reduce<Partial<Record<SwipeDir, LabelOption>>>(
     (acc, l) => { if (l.swipe_direction) acc[l.swipe_direction] = l; return acc },
