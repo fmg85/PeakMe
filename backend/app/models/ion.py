@@ -22,6 +22,7 @@ class Ion(Base):
     )
     mz_value: Mapped[float] = mapped_column(Float, nullable=False)
     image_key: Mapped[str] = mapped_column(String(500), nullable=False)  # S3 object key
+    tic_image_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

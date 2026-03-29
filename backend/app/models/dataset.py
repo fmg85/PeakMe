@@ -25,6 +25,8 @@ class Dataset(Base):
         String(20), default="pending", nullable=False
     )  # pending | ready | error
     error_msg: Mapped[str | None] = mapped_column(Text, nullable=True)
+    fluorescence_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    fluorescence_outline_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

@@ -75,6 +75,11 @@ export default function ProjectDetailPage() {
   // inline label editing
   const [editingId, setEditingId] = useState<string | null>(null)
   const [confirmDeleteDatasetId, setConfirmDeleteDatasetId] = useState<string | null>(null)
+  const [refOpen, setRefOpen] = useState<Record<string, boolean>>({})
+  const [refUploading, setRefUploading] = useState<Record<string, 'fluorescence' | 'outline' | null>>({})
+  const [refError, setRefError] = useState<Record<string, string | null>>({})
+  const fluorRefs = useRef<Record<string, HTMLInputElement | null>>({})
+  const outlineRefs = useRef<Record<string, HTMLInputElement | null>>({})
   const [editName, setEditName] = useState('')
   const [editColor, setEditColor] = useState('')
   const [editShortcut, setEditShortcut] = useState('')
@@ -180,6 +185,27 @@ export default function ProjectDetailPage() {
     })
   }
 
+  const handleRefUpload = async (datasetId: string, type: 'fluorescence' | 'outline') => {
+    const input = type === 'fluorescence' ? fluorRefs.current[datasetId] : outlineRefs.current[datasetId]
+    const file = input?.files?.[0]
+    if (!file) return
+    setRefUploading((prev) => ({ ...prev, [datasetId]: type }))
+    setRefError((prev) => ({ ...prev, [datasetId]: null }))
+    const form = new FormData()
+    form.append(type === 'fluorescence' ? 'fluorescence' : 'outline', file)
+    try {
+      await apiClient.patch(`/api/datasets/${datasetId}/reference-images`, form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      queryClient.invalidateQueries({ queryKey: ['datasets', projectId] })
+      if (input) input.value = ''
+    } catch (err: any) {
+      setRefError((prev) => ({ ...prev, [datasetId]: err.response?.data?.detail || 'Upload failed' }))
+    } finally {
+      setRefUploading((prev) => ({ ...prev, [datasetId]: null }))
+    }
+  }
+
   const startEdit = (label: LabelOption) => {
     setEditingId(label.id)
     setEditName(label.name)
@@ -280,18 +306,69 @@ export default function ProjectDetailPage() {
                     </div>
                   </div>
                   {ds.status === 'ready' && (
-                    <div className="mt-2">
-                      <div className="flex justify-between text-xs text-gray-500 mb-1">
-                        <span>Your annotations</span>
-                        <span>{ds.my_annotation_count} / {ds.total_ions} ({pct}%)</span>
+                    <>
+                      <div className="mt-2">
+                        <div className="flex justify-between text-xs text-gray-500 mb-1">
+                          <span>Your annotations</span>
+                          <span>{ds.my_annotation_count} / {ds.total_ions} ({pct}%)</span>
+                        </div>
+                        <div className="h-1.5 rounded-full bg-gray-800">
+                          <div
+                            className="h-1.5 rounded-full bg-brand-orange transition-all duration-500"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
                       </div>
-                      <div className="h-1.5 rounded-full bg-gray-800">
-                        <div
-                          className="h-1.5 rounded-full bg-brand-orange transition-all duration-500"
-                          style={{ width: `${pct}%` }}
-                        />
+
+                      {/* Reference images (fluorescence + outline) */}
+                      <div className="mt-2 pt-2 border-t border-gray-800">
+                        <button
+                          onClick={() => setRefOpen((prev) => ({ ...prev, [ds.id]: !prev[ds.id] }))}
+                          className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-400 transition-colors"
+                        >
+                          <span>{refOpen[ds.id] ? '▾' : '▸'} Reference images</span>
+                          {(ds.fluorescence_url || ds.fluorescence_outline_url) && (
+                            <span className="text-green-400" title="Reference images uploaded">●</span>
+                          )}
+                        </button>
+                        {refOpen[ds.id] && (
+                          <div className="mt-2 grid grid-cols-2 gap-3">
+                            {(['fluorescence', 'outline'] as const).map((type) => {
+                              const isSet = type === 'fluorescence' ? !!ds.fluorescence_url : !!ds.fluorescence_outline_url
+                              const label = type === 'fluorescence' ? 'Fluorescence image' : 'Outline PNG'
+                              const accept = type === 'fluorescence' ? 'image/*' : 'image/png'
+                              const refs = type === 'fluorescence' ? fluorRefs : outlineRefs
+                              return (
+                                <div key={type}>
+                                  <p className="text-xs text-gray-400 mb-1 flex items-center gap-1">
+                                    {label}
+                                    {isSet && <span className="text-green-400 text-xs">✓</span>}
+                                  </p>
+                                  <div className="flex gap-1.5 items-center">
+                                    <input
+                                      ref={(el) => { refs.current[ds.id] = el }}
+                                      type="file"
+                                      accept={accept}
+                                      className="text-xs text-gray-400 flex-1 min-w-0"
+                                    />
+                                    <button
+                                      onClick={() => handleRefUpload(ds.id, type)}
+                                      disabled={refUploading[ds.id] === type}
+                                      className="rounded px-2 py-1 text-xs bg-gray-700 text-gray-300 hover:bg-gray-600 disabled:opacity-50 whitespace-nowrap transition-colors"
+                                    >
+                                      {refUploading[ds.id] === type ? '…' : isSet ? 'Replace' : 'Upload'}
+                                    </button>
+                                  </div>
+                                </div>
+                              )
+                            })}
+                            {refError[ds.id] && (
+                              <p className="col-span-2 text-xs text-red-400">{refError[ds.id]}</p>
+                            )}
+                          </div>
+                        )}
                       </div>
-                    </div>
+                    </>
                   )}
                 </div>
               )

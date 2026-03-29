@@ -15,5 +15,7 @@ class DatasetOut(BaseModel):
     status: str
     error_msg: str | None
     created_at: datetime
+    fluorescence_url: str | None = None
+    fluorescence_outline_url: str | None = None
 
     model_config = {"from_attributes": True}

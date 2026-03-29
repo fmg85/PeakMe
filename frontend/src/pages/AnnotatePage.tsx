@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useDrag } from '@use-gesture/react'
@@ -8,6 +8,14 @@ import type { Dataset, IonQueueItem, LabelOption, Project } from '../lib/types'
 
 type AnimDirection = 'left' | 'right' | 'up' | 'down' | null
 type SwipeDir = 'left' | 'right' | 'up' | 'down'
+type Layer = 'ion' | 'tic' | 'fluorescence' | 'overlay'
+
+const LAYER_NAMES: Record<Layer, string> = {
+  ion: 'Ion image',
+  tic: 'TIC spectrum',
+  fluorescence: 'Fluorescence',
+  overlay: 'Ion + outline',
+}
 
 const SWIPE_COMMIT = 90   // px — distance to commit an annotation
 const SWIPE_HINT  = 35   // px — distance to start showing the edge label
@@ -26,7 +34,7 @@ export default function AnnotatePage() {
   const queryClient = useQueryClient()
 
   const [anim, setAnim] = useState<AnimDirection>(null)
-  const [zoomed, setZoomed] = useState(false)
+  const [layerIndex, setLayerIndex] = useState(0)
   const [strategy, setStrategy] = useState<'unannotated_first' | 'starred_first' | 'all'>('unannotated_first')
   const [sessionStarted, setSessionStarted] = useState(false)
   const [sessionAnnotations, setSessionAnnotations] = useState(0)
@@ -110,9 +118,8 @@ export default function AnnotatePage() {
   }, [undoStack, prependItem])
 
   // Swipe gesture
-  const bind = useDrag(({ down, movement: [mx, my], velocity: [vx, vy], cancel }) => {
+  const bind = useDrag(({ down, movement: [mx, my], velocity: [vx, vy] }) => {
     if (!current) return
-    if (zoomed) { if (down) cancel(); return }
 
     if (down) {
       setDragXY([mx, my])
@@ -150,6 +157,25 @@ export default function AnnotatePage() {
     ? baselineAnnotations + sessionAnnotations
     : sessionAnnotations
   const remaining_unannotated = Math.max(0, total - baselineAnnotations - (strategy === 'unannotated_first' ? sessionAnnotations : 0))
+
+  // Layer cycling: ion image → TIC spectrum → fluorescence → outline overlay → repeat
+  const availableLayers = useMemo((): Layer[] => {
+    const layers: Layer[] = ['ion']
+    if (current?.tic_image_url) layers.push('tic')
+    if (dataset?.fluorescence_url) layers.push('fluorescence')
+    if (dataset?.fluorescence_outline_url) layers.push('overlay')
+    return layers
+  }, [current?.tic_image_url, dataset?.fluorescence_url, dataset?.fluorescence_outline_url])
+
+  const currentLayer = availableLayers[layerIndex % availableLayers.length] ?? 'ion'
+
+  const cycleLayer = useCallback(() => {
+    if (availableLayers.length <= 1) return
+    setLayerIndex((prev) => (prev + 1) % availableLayers.length)
+  }, [availableLayers.length])
+
+  // Reset to the ion layer whenever the card changes
+  useEffect(() => { setLayerIndex(0) }, [current?.id])
 
   // When the queue exhausts, refresh the dataset so the header and session-start
   // screen show the true my_annotation_count for next time.
@@ -355,25 +381,86 @@ export default function AnnotatePage() {
 
               {/* Ion image card — key={current.id} forces a fresh DOM element per ion so
                   React never reuses the element from the previous card's fly-off animation.
-                  animate-fade-in plays on mount (opacity 0→1, 0.2s); the transform
-                  transition handles exit without conflicting since fadeIn no longer
-                  animates transform. */}
+                  Tap cycles through available reference layers (TIC, fluorescence, overlay). */}
               <div
                 key={current.id}
                 {...bind()}
                 className={`absolute inset-0 rounded-xl overflow-hidden shadow-2xl${!isDragging && !anim ? ' animate-fade-in' : ''}`}
                 style={cardStyle}
-                onClick={() => { if (!isDragging) setZoomed((z) => !z) }}
+                onClick={() => { if (!isDragging) cycleLayer() }}
               >
-                <img
-                  src={current.image_url}
-                  alt={`Ion m/z ${current.mz_value}`}
-                  className={`w-full h-full block transition-transform duration-200 ${zoomed ? 'scale-150' : 'scale-100'}`}
-                  style={{ imageRendering: 'pixelated' }}
-                  draggable={false}
-                />
+                {/* Ion image (default layer) */}
+                {currentLayer === 'ion' && (
+                  <img
+                    src={current.image_url}
+                    alt={`Ion m/z ${current.mz_value}`}
+                    className="w-full h-full block"
+                    style={{ imageRendering: 'pixelated' }}
+                    draggable={false}
+                  />
+                )}
+
+                {/* TIC spectrum */}
+                {currentLayer === 'tic' && (
+                  <img
+                    src={current.tic_image_url!}
+                    alt="TIC spectrum"
+                    className="w-full h-full block object-contain"
+                    draggable={false}
+                  />
+                )}
+
+                {/* Fluorescence image (proportional resize, centered) */}
+                {currentLayer === 'fluorescence' && (
+                  <img
+                    src={dataset?.fluorescence_url!}
+                    alt="Fluorescence"
+                    className="w-full h-full block object-contain"
+                    draggable={false}
+                  />
+                )}
+
+                {/* Overlay: ion image with fluorescence outline on top.
+                    mix-blend-mode: multiply makes white areas transparent. */}
+                {currentLayer === 'overlay' && (
+                  <div className="absolute inset-0">
+                    <img
+                      src={current.image_url}
+                      alt={`Ion m/z ${current.mz_value}`}
+                      className="w-full h-full block object-contain"
+                      style={{ imageRendering: 'pixelated' }}
+                      draggable={false}
+                    />
+                    <img
+                      src={dataset?.fluorescence_outline_url!}
+                      alt="Fluorescence outline"
+                      className="absolute inset-0 w-full h-full block object-contain"
+                      style={{ mixBlendMode: 'multiply' }}
+                      draggable={false}
+                    />
+                  </div>
+                )}
+
+                {/* Star badge */}
                 {current.is_starred && (
                   <div className="absolute top-2 right-2 text-yellow-400 text-lg drop-shadow">★</div>
+                )}
+
+                {/* Layer indicator — dots + label, shown only when multiple layers exist */}
+                {availableLayers.length > 1 && (
+                  <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-1 pointer-events-none">
+                    <div className="flex gap-1.5">
+                      {availableLayers.map((_, i) => (
+                        <div
+                          key={i}
+                          className={`w-1.5 h-1.5 rounded-full transition-colors ${i === layerIndex ? 'bg-white' : 'bg-white/30'}`}
+                        />
+                      ))}
+                    </div>
+                    <span className="text-xs text-white/80 bg-black/50 rounded-full px-2 py-0.5 whitespace-nowrap">
+                      {LAYER_NAMES[currentLayer]}
+                    </span>
+                  </div>
                 )}
               </div>
             </div>
@@ -423,15 +510,11 @@ export default function AnnotatePage() {
               </button>
             </div>
 
-            {/* Swipe hint — only if any swipe labels configured */}
-            {Object.keys(swipeMap).length > 0 && !isDragging && (
+            {/* Hint text */}
+            {!isDragging && (
               <p className="mt-2 text-xs text-gray-600 flex-shrink-0">
-                Swipe to annotate · S to star · Z to undo
-              </p>
-            )}
-            {Object.keys(swipeMap).length === 0 && (
-              <p className="mt-2 text-xs text-gray-600 flex-shrink-0">
-                Press label key to annotate · S to star · Z to undo
+                {availableLayers.length > 1 && 'Tap image to cycle layers · '}
+                {Object.keys(swipeMap).length > 0 ? 'Swipe' : 'Press key'} to annotate · S to star · Z to undo
               </p>
             )}
           </>

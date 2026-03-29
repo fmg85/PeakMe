@@ -59,9 +59,11 @@ if (interactive()) {
     output    = "./peakme_export",  # EDIT ME — folder to write PNGs into
     width     = 400L,
     height    = 400L,
-    colormap  = "viridis",  # viridis | magma | plasma | inferno | cividis
-    normalize = "rms",      # rms | tic | none
-    zip       = TRUE        # TRUE = create a .zip ready to upload to PeakMe
+    colormap   = "viridis",  # viridis | magma | plasma | inferno | cividis
+    normalize  = "rms",      # rms | tic | none
+    zip        = TRUE,       # TRUE = create a .zip ready to upload to PeakMe
+    export_tic = TRUE        # TRUE = generate a TIC spectrum PNG per ion image
+                             # (adds ~20-50% to export time; included in the ZIP)
   )
 } else {
   # ---------------------------------------------------------------------------
@@ -97,6 +99,10 @@ if (interactive()) {
     make_option(c("--zip"),
       action = "store_true", default = FALSE,
       help = "Zip the output directory after export (produces <output>.zip)"
+    ),
+    make_option("--no-tic",
+      action = "store_true", default = FALSE,
+      help = "Skip TIC spectrum PNG generation (faster export, smaller ZIP)"
     )
   )
 
@@ -107,6 +113,7 @@ if (interactive()) {
   )
   args <- parse_args(parser)
   args$msi_object <- NULL
+  args$export_tic <- !args[["no-tic"]]
   args$msi_file   <- args$file
 
   if (is.null(args$msi_file)) {
@@ -257,6 +264,72 @@ if (gb_needed < 8) {
 # ── Pre-compute colormap as float RGB (256 × 3) for direct pixel writes ──────
 colors_rgb <- t(col2rgb(colors)) / 255   # 256 × 3, values in [0, 1]
 
+# ── Pre-compute mean spectrum for TIC plots (once, reused per ion) ────────────
+if (args$export_tic) {
+  if (exists("int_mat")) {
+    message("  Pre-computing mean spectrum for TIC plots…")
+    mean_spec <- rowMeans(int_mat, na.rm = TRUE)
+  } else {
+    message("  Note: TIC spectrum export skipped — dataset too large to materialise.")
+    args$export_tic <- FALSE
+  }
+}
+
+# ── TIC spectrum renderer ─────────────────────────────────────────────────────
+# Renders the mean mass spectrum in a ±2 Da window around the target m/z as a
+# raw pixel array (same writePNG approach as ion images — no graphics device).
+render_tic_png <- function(feat_idx, mz_values, mean_spec, w, h) {
+  target_mz <- mz_values[feat_idx]
+  lo   <- target_mz - 2; hi <- target_mz + 2
+  mask <- mz_values >= lo & mz_values <= hi
+  mz_w  <- mz_values[mask]
+  int_w <- mean_spec[mask]
+
+  # Dark theme matching the PeakMe UI
+  bg  <- c(0.059, 0.090, 0.165)  # #0f172a  (background)
+  lc  <- c(0.655, 0.545, 0.980)  # #a78bfa  (spectrum bar, purple)
+  mkr <- c(0.976, 0.451, 0.086)  # #f97316  (target m/z marker, orange)
+
+  r_ch <- matrix(bg[1L], nrow = h, ncol = w)
+  g_ch <- matrix(bg[2L], nrow = h, ncol = w)
+  b_ch <- matrix(bg[3L], nrow = h, ncol = w)
+
+  if (length(mz_w) >= 2L) {
+    pad    <- max(1L, as.integer(w * 0.04))
+    pw     <- w - 2L * pad
+    pt     <- max(1L, as.integer(h * 0.06))   # top margin (px)
+    ph     <- h - pt - max(1L, as.integer(h * 0.12))  # usable height (px)
+
+    mz_rng  <- range(mz_w)
+    int_max <- max(int_w, na.rm = TRUE)
+    if (is.na(int_max) || int_max <= 0) int_max <- 1
+
+    cx    <- pad + pmax(1L, pmin(pw, as.integer(
+                (mz_w - mz_rng[1L]) / (mz_rng[2L] - mz_rng[1L]) * (pw - 1L)) + 1L))
+    int_n <- pmax(0, pmin(1, int_w / int_max))
+    top_r <- pt + pmax(0L, as.integer((1 - int_n) * (ph - 1L)))
+    bot_r <- pt + ph - 1L
+
+    for (j in seq_along(mz_w)) {
+      rows <- top_r[j]:bot_r
+      r_ch[rows, cx[j]] <- lc[1L]
+      g_ch[rows, cx[j]] <- lc[2L]
+      b_ch[rows, cx[j]] <- lc[3L]
+    }
+
+    # Orange marker at the target m/z
+    if (target_mz >= mz_rng[1L] && target_mz <= mz_rng[2L]) {
+      mx <- pad + pmax(1L, pmin(pw, as.integer(
+              (target_mz - mz_rng[1L]) / (mz_rng[2L] - mz_rng[1L]) * (pw - 1L)) + 1L))
+      r_ch[pt:bot_r, mx] <- mkr[1L]
+      g_ch[pt:bot_r, mx] <- mkr[2L]
+      b_ch[pt:bot_r, mx] <- mkr[3L]
+    }
+  }
+
+  array(c(r_ch, g_ch, b_ch), dim = c(h, w, 3L))
+}
+
 metadata_rows <- vector("list", n_features)
 t_start <- proc.time()[["elapsed"]]
 
@@ -291,6 +364,13 @@ for (i in seq_along(mz_values)) {
     dim = c(n_rows, n_cols, 3L)
   )
   writePNG(img_arr, fpath)
+
+  # TIC spectrum PNG (same name with _tic suffix, landscape aspect ratio)
+  if (args$export_tic) {
+    tic_h   <- max(100L, args$width %/% 2L)   # e.g. 400 wide → 200 tall
+    tic_arr <- render_tic_png(i, mz_values, mean_spec, args$width, tic_h)
+    writePNG(tic_arr, file.path(args$output, sprintf("%.4f_tic.png", mz_val)))
+  }
 
   metadata_rows[[i]] <- data.frame(filename = fname, mz_value = mz_val,
                                    stringsAsFactors = FALSE)

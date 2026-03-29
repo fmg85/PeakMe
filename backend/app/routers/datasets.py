@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
@@ -12,11 +13,22 @@ from app.models.ion import Ion
 from app.models.project import Project
 from app.schemas.dataset import DatasetOut
 from app.services.ingest import IngestError, ingest_zip
-from app.services.storage import delete_dataset_images
+from app.services.storage import delete_dataset_images, generate_presigned_url, upload_file
 
 router = APIRouter(tags=["datasets"])
 
 MAX_ZIP_SIZE = 2 * 1024 * 1024 * 1024  # 2 GB
+MAX_REF_IMAGE_SIZE = 50 * 1024 * 1024  # 50 MB
+
+
+def _dataset_out(dataset: Dataset, my_annotation_count: int = 0) -> DatasetOut:
+    """Build DatasetOut with presigned URLs for reference images."""
+    out = DatasetOut.model_validate(dataset).model_copy(update={
+        "my_annotation_count": my_annotation_count,
+        "fluorescence_url": generate_presigned_url(dataset.fluorescence_key) if dataset.fluorescence_key else None,
+        "fluorescence_outline_url": generate_presigned_url(dataset.fluorescence_outline_key) if dataset.fluorescence_outline_key else None,
+    })
+    return out
 
 
 async def _ingest_background(zip_bytes: bytes, dataset_id: uuid.UUID) -> None:
@@ -63,10 +75,7 @@ async def list_datasets(
     )
     counts = {row.dataset_id: row.cnt for row in count_result}
 
-    return [
-        DatasetOut.model_validate(d).model_copy(update={"my_annotation_count": counts.get(d.id, 0)})
-        for d in datasets
-    ]
+    return [_dataset_out(d, counts.get(d.id, 0)) for d in datasets]
 
 
 @router.post("/api/datasets/upload", response_model=DatasetOut, status_code=status.HTTP_202_ACCEPTED)
@@ -104,7 +113,7 @@ async def upload_dataset(
     # Kick off ingestion after the response is sent
     background_tasks.add_task(_ingest_background, zip_bytes, dataset.id)
 
-    return dataset
+    return _dataset_out(dataset, 0)
 
 
 @router.get("/api/datasets/{dataset_id}", response_model=DatasetOut)
@@ -124,7 +133,7 @@ async def get_dataset(
         .where(Ion.dataset_id == dataset_id, Annotation.user_id == current_user.id)
     )
     my_count = count_result.scalar() or 0
-    return DatasetOut.model_validate(dataset).model_copy(update={"my_annotation_count": my_count})
+    return _dataset_out(dataset, my_count)
 
 
 @router.delete("/api/datasets/{dataset_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -146,3 +155,52 @@ async def delete_dataset(
 
     await db.delete(dataset)
     await db.commit()
+
+
+@router.patch("/api/datasets/{dataset_id}/reference-images", response_model=DatasetOut)
+async def upload_reference_images(
+    dataset_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+    fluorescence: UploadFile | None = File(default=None),
+    outline: UploadFile | None = File(default=None),
+):
+    """
+    Upload or replace the fluorescence image and/or fluorescence outline for a dataset.
+    Both files are optional — send only the one(s) you want to update.
+    """
+    result = await db.execute(select(Dataset).where(Dataset.id == dataset_id))
+    dataset = result.scalar_one_or_none()
+    if not dataset:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    loop = asyncio.get_running_loop()
+
+    if fluorescence is not None:
+        data = await fluorescence.read()
+        if len(data) > MAX_REF_IMAGE_SIZE:
+            raise HTTPException(status_code=422, detail="Fluorescence image exceeds 50 MB limit.")
+        content_type = fluorescence.content_type or "image/jpeg"
+        ext = fluorescence.filename.rsplit(".", 1)[-1].lower() if fluorescence.filename else "jpg"
+        fname = f"fluorescence.{ext}"
+        dataset.fluorescence_key = await loop.run_in_executor(
+            None, upload_file, data, dataset_id, fname, content_type
+        )
+
+    if outline is not None:
+        data = await outline.read()
+        if len(data) > MAX_REF_IMAGE_SIZE:
+            raise HTTPException(status_code=422, detail="Outline image exceeds 50 MB limit.")
+        content_type = outline.content_type or "image/png"
+        ext = outline.filename.rsplit(".", 1)[-1].lower() if outline.filename else "png"
+        fname = f"fluorescence_outline.{ext}"
+        dataset.fluorescence_outline_key = await loop.run_in_executor(
+            None, upload_file, data, dataset_id, fname, content_type
+        )
+
+    if fluorescence is not None or outline is not None:
+        db.add(dataset)
+        await db.commit()
+        await db.refresh(dataset)
+
+    return _dataset_out(dataset)

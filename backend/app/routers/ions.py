@@ -90,6 +90,7 @@ async def get_ion_queue(
             mz_value=ion.mz_value,
             sort_order=ion.sort_order,
             image_url=generate_presigned_url(ion.image_key),
+            tic_image_url=generate_presigned_url(ion.tic_image_key) if ion.tic_image_key else None,
             is_starred=ion.id in starred_ions,
             annotation=AnnotationSummary(
                 label_option_id=ann.label_option_id,

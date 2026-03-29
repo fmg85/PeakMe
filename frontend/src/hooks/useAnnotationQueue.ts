@@ -39,7 +39,10 @@ export function useAnnotationQueue({ datasetId, strategy = 'unannotated_first' }
       setQueue(items)
       setOffset(items.length)
       if (items.length < BATCH_SIZE) setExhausted(true)
-      items.forEach((item) => prefetchImage(item.image_url))
+      items.forEach((item) => {
+        prefetchImage(item.image_url)
+        if (item.tic_image_url) prefetchImage(item.tic_image_url)
+      })
       initializedRef.current = true
     })
   }, [datasetId, strategy, reloadKey])
@@ -53,7 +56,10 @@ export function useAnnotationQueue({ datasetId, strategy = 'unannotated_first' }
         setQueue((prev) => [...prev, ...items])
         setOffset((prev) => prev + items.length)
         if (items.length < BATCH_SIZE) setExhausted(true)
-        items.forEach((item) => prefetchImage(item.image_url))
+        items.forEach((item) => {
+          prefetchImage(item.image_url)
+          if (item.tic_image_url) prefetchImage(item.tic_image_url)
+        })
         prefetchingRef.current = false
       })
     }

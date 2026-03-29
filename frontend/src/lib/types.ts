@@ -37,6 +37,8 @@ export interface Dataset {
   status: 'pending' | 'processing' | 'ready' | 'error'
   error_msg: string | null
   created_at: string
+  fluorescence_url: string | null
+  fluorescence_outline_url: string | null
 }
 
 export interface AnnotationSummary {
@@ -50,6 +52,7 @@ export interface IonQueueItem {
   mz_value: number
   sort_order: number
   image_url: string
+  tic_image_url: string | null
   is_starred: boolean
   annotation: AnnotationSummary | null
 }

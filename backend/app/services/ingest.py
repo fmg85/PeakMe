@@ -88,15 +88,28 @@ async def ingest_zip(
         parsed.append((fname, mz, zip_path))
 
     # ── Parallel S3 uploads ────────────────────────────────────────────────────
-    # boto3 is synchronous; run uploads in a thread pool so they happen
-    # concurrently without blocking the async event loop.
     loop = asyncio.get_running_loop()
 
-    def _upload(item: tuple[str, float, str]) -> tuple[str, float, str]:
+    def _upload(item: tuple[str, float, str]) -> tuple[str, float, str, str | None]:
         fname, mz, zip_path = item
         img_bytes = zf.read(zip_path)
         key = upload_image(img_bytes, dataset.id, fname)
-        return (fname, mz, key)
+
+        # Upload TIC spectrum PNG if present (named <base>_tic.png)
+        tic_fname = fname.replace(".png", "_tic.png")
+        tic_zip_path = tic_fname
+        candidate = f"{base_dir}/{tic_fname}"
+        if candidate in zip_files and base_dir != ".":
+            tic_zip_path = candidate
+        elif tic_fname not in zip_files:
+            tic_zip_path = None
+
+        tic_key: str | None = None
+        if tic_zip_path:
+            tic_bytes = zf.read(tic_zip_path)
+            tic_key = upload_image(tic_bytes, dataset.id, tic_fname)
+
+        return (fname, mz, key, tic_key)
 
     with ThreadPoolExecutor(max_workers=_S3_WORKERS) as pool:
         results = await asyncio.gather(
@@ -109,9 +122,10 @@ async def ingest_zip(
             dataset_id=dataset.id,
             mz_value=mz,
             image_key=key,
+            tic_image_key=tic_key,
             sort_order=i,
         )
-        for i, (fname, mz, key) in enumerate(results)
+        for i, (fname, mz, key, tic_key) in enumerate(results)
     ]
     db.add_all(ions)
     dataset.total_ions = len(ions)

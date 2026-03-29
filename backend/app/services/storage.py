@@ -42,6 +42,19 @@ def upload_image(data: bytes, dataset_id: uuid.UUID, filename: str) -> str:
     return key
 
 
+def upload_file(data: bytes, dataset_id: uuid.UUID, filename: str, content_type: str) -> str:
+    """Upload any file to S3 and return its object key."""
+    key = f"datasets/{dataset_id}/{filename}"
+    get_s3_client().put_object(
+        Bucket=settings.aws_s3_bucket,
+        Key=key,
+        Body=data,
+        ContentType=content_type,
+        CacheControl="public, max-age=31536000, immutable",
+    )
+    return key
+
+
 def generate_presigned_url(key: str, expires_in: int = 3600) -> str:
     """Generate a presigned URL for an S3 object. Default TTL: 1 hour."""
     return get_s3_client().generate_presigned_url(

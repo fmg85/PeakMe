@@ -19,6 +19,7 @@ class IonQueueItem(BaseModel):
     mz_value: float
     sort_order: int
     image_url: str          # presigned S3 URL
+    tic_image_url: str | None = None
     is_starred: bool = False
     annotation: "AnnotationSummary | None" = None
 

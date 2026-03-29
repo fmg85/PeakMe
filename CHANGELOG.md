@@ -7,6 +7,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## Unreleased
 
+- feat: reference layers — tap the ion image card to cycle through: Ion image → TIC spectrum → Fluorescence → Ion + outline → repeat; only layers with data available are shown
+- feat: TIC spectrum PNGs auto-generated per ion by the export script (±2 Da window around peak, dark theme, included in ZIP); disable with `export_tic = FALSE` or `--no-tic` on CLI
+- feat: fluorescence image + outline upload per dataset (project page → "Reference images" expand)
 - fix: session annotation counter no longer inflates when re-annotating an already-labelled ion (was counting upserts as new annotations, making progress display higher than actual DB count)
 - fix: "X left" counter showed wrong non-zero value at exhaustion and "All done!" message showed wrong total — root cause: React Query background refetches updated `my_annotation_count` mid-session causing double-counting; fixed by snapshotting the baseline at session start and refreshing the dataset query on queue exhaustion
 - feat: `starred` column added to annotation CSV/JSON exports (both project-wide and per-dataset)
