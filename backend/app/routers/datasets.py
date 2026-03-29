@@ -11,7 +11,7 @@ from app.models.annotation import Annotation
 from app.models.dataset import Dataset
 from app.models.ion import Ion
 from app.models.project import Project
-from app.schemas.dataset import DatasetOut
+from app.schemas.dataset import DatasetLabelSummary, DatasetOut, LabelCount
 from app.services.ingest import IngestError, ingest_zip
 from app.services.storage import delete_dataset_images, generate_presigned_url, upload_file
 
@@ -134,6 +134,49 @@ async def get_dataset(
     )
     my_count = count_result.scalar() or 0
     return _dataset_out(dataset, my_count)
+
+
+@router.get("/api/datasets/{dataset_id}/label-summary", response_model=DatasetLabelSummary)
+async def get_dataset_label_summary(
+    dataset_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    """Per-label annotation counts for the current user on this dataset."""
+    result = await db.execute(select(Dataset).where(Dataset.id == dataset_id))
+    dataset = result.scalar_one_or_none()
+    if not dataset:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    total = dataset.total_ions or 0
+
+    # Count annotations per label_name for this user on this dataset
+    label_result = await db.execute(
+        select(Annotation.label_name, func.count(Annotation.id).label("cnt"))
+        .join(Ion, Ion.id == Annotation.ion_id)
+        .where(Ion.dataset_id == dataset_id, Annotation.user_id == current_user.id)
+        .group_by(Annotation.label_name)
+    )
+    rows = label_result.all()
+
+    annotated = sum(r.cnt for r in rows)
+    unannotated = max(0, total - annotated)
+
+    labels = [
+        LabelCount(
+            label_name=r.label_name,
+            count=r.cnt,
+            pct=round(r.cnt / total * 100, 1) if total > 0 else 0.0,
+        )
+        for r in sorted(rows, key=lambda r: r.cnt, reverse=True)
+    ]
+
+    return DatasetLabelSummary(
+        total=total,
+        annotated=annotated,
+        unannotated=unannotated,
+        labels=labels,
+    )
 
 
 @router.delete("/api/datasets/{dataset_id}", status_code=status.HTTP_204_NO_CONTENT)

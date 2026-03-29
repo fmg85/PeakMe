@@ -19,3 +19,16 @@ class DatasetOut(BaseModel):
     fluorescence_outline_url: str | None = None
 
     model_config = {"from_attributes": True}
+
+
+class LabelCount(BaseModel):
+    label_name: str
+    count: int
+    pct: float  # percentage of total_ions
+
+
+class DatasetLabelSummary(BaseModel):
+    total: int
+    annotated: int
+    unannotated: int
+    labels: list[LabelCount]

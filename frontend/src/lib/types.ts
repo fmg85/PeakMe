@@ -57,6 +57,13 @@ export interface IonQueueItem {
   annotation: AnnotationSummary | null
 }
 
+export interface DatasetLabelSummary {
+  total: number
+  annotated: number
+  unannotated: number
+  labels: Array<{ label_name: string; count: number; pct: number }>
+}
+
 export interface StatsOut {
   total_ions: number
   total_annotations: number

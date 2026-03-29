@@ -1,8 +1,8 @@
 import { useState, useRef } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query'
 import apiClient from '../lib/apiClient'
-import type { Dataset, LabelOption, Project } from '../lib/types'
+import type { Dataset, DatasetLabelSummary, LabelOption, Project } from '../lib/types'
 
 const LABEL_COLORS = [
   '#6366f1', '#8b5cf6', '#ec4899', '#ef4444',
@@ -107,6 +107,17 @@ export default function ProjectDetailPage() {
       return data?.some((d) => d.status === 'processing' || d.status === 'pending') ? 3000 : false
     },
   })
+
+  const readyDatasetIds = (datasets ?? []).filter((d) => d.status === 'ready').map((d) => d.id)
+  const labelSummaryResults = useQueries({
+    queries: readyDatasetIds.map((id) => ({
+      queryKey: ['dataset-label-summary', id],
+      queryFn: () => apiClient.get<DatasetLabelSummary>(`/api/datasets/${id}/label-summary`).then((r) => r.data),
+    })),
+  })
+  const labelSummaries: Record<string, DatasetLabelSummary> = Object.fromEntries(
+    readyDatasetIds.map((id, i) => [id, labelSummaryResults[i].data as DatasetLabelSummary]).filter(([, v]) => v)
+  )
 
   const addLabel = useMutation({
     mutationFn: (body: { name: string; color: string; keyboard_shortcut?: string; swipe_direction?: SwipeDir }) =>
@@ -310,7 +321,7 @@ export default function ProjectDetailPage() {
                       <div className="mt-2">
                         <div className="flex justify-between text-xs text-gray-500 mb-1">
                           <span>Your annotations</span>
-                          <span>{ds.my_annotation_count} / {ds.total_ions} ({pct}%)</span>
+                          <span>{ds.my_annotation_count.toLocaleString()} / {ds.total_ions.toLocaleString()} ({pct}%)</span>
                         </div>
                         <div className="h-1.5 rounded-full bg-gray-800">
                           <div
@@ -318,6 +329,34 @@ export default function ProjectDetailPage() {
                             style={{ width: `${pct}%` }}
                           />
                         </div>
+
+                        {/* Per-label breakdown */}
+                        {labelSummaries[ds.id]?.labels.length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {labelSummaries[ds.id].labels.map((lb) => {
+                              const color = project?.label_options.find((l) => l.name === lb.label_name)?.color ?? '#6366f1'
+                              return (
+                                <span
+                                  key={lb.label_name}
+                                  className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs text-white"
+                                  style={{ backgroundColor: color + '33', border: `1px solid ${color}66` }}
+                                  title={`${lb.count.toLocaleString()} ions`}
+                                >
+                                  <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+                                  {lb.label_name}
+                                  <span className="opacity-70">{lb.pct}%</span>
+                                </span>
+                              )
+                            })}
+                            {labelSummaries[ds.id].unannotated > 0 && (
+                              <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs text-gray-500 border border-gray-700">
+                                <span className="w-1.5 h-1.5 rounded-full bg-gray-600 flex-shrink-0" />
+                                unannotated
+                                <span className="opacity-70">{Math.round(labelSummaries[ds.id].unannotated / labelSummaries[ds.id].total * 100)}%</span>
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
 
                       {/* Reference images (fluorescence + outline) */}

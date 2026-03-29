@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useDrag } from '@use-gesture/react'
 import apiClient from '../lib/apiClient'
 import { useAnnotationQueue } from '../hooks/useAnnotationQueue'
-import type { Dataset, IonQueueItem, LabelOption, Project } from '../lib/types'
+import type { Dataset, DatasetLabelSummary, IonQueueItem, LabelOption, Project } from '../lib/types'
 
 type AnimDirection = 'left' | 'right' | 'up' | 'down' | null
 type SwipeDir = 'left' | 'right' | 'up' | 'down'
@@ -59,6 +59,12 @@ export default function AnnotatePage() {
     queryKey: ['dataset', datasetId],
     queryFn: () => apiClient.get(`/api/datasets/${datasetId}`).then((r) => r.data),
     enabled: !!datasetId,
+  })
+
+  const { data: labelSummary } = useQuery<DatasetLabelSummary>({
+    queryKey: ['dataset-label-summary', datasetId],
+    queryFn: () => apiClient.get(`/api/datasets/${datasetId}/label-summary`).then((r) => r.data),
+    enabled: !!datasetId && exhausted && sessionStarted,
   })
 
   const { current, remaining, advance, updateCurrent, exhausted, forceReload, prependItem } = useAnnotationQueue({
@@ -315,7 +321,7 @@ export default function AnnotatePage() {
       {/* Main content */}
       <div className="flex flex-1 flex-col items-center justify-center px-4 py-2 overflow-hidden">
         {exhausted && !current ? (
-          <div className="text-center space-y-4 max-w-sm">
+          <div className="text-center space-y-4 max-w-sm w-full">
             <div className="text-5xl">🎉</div>
             <h2 className="text-xl font-semibold text-white">
               {strategy === 'unannotated_first' ? 'All done!' : strategy === 'starred_first' ? 'No starred ions' : 'End of dataset'}
@@ -327,6 +333,41 @@ export default function AnnotatePage() {
                 ? 'No starred ions found.'
                 : 'You reached the end of the dataset.'}
             </p>
+
+            {/* Label breakdown */}
+            {labelSummary && labelSummary.labels.length > 0 && (
+              <div className="rounded-xl bg-gray-900 p-4 text-left space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Your annotations</p>
+                <div className="space-y-1.5">
+                  {labelSummary.labels.map((lb) => {
+                    const labelOption = project?.label_options.find((l) => l.name === lb.label_name)
+                    const color = labelOption?.color ?? '#6366f1'
+                    const barPct = labelSummary.total > 0 ? (lb.count / labelSummary.total) * 100 : 0
+                    return (
+                      <div key={lb.label_name}>
+                        <div className="flex justify-between text-xs mb-0.5">
+                          <span className="text-gray-300 flex items-center gap-1.5">
+                            <span className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+                            {lb.label_name}
+                          </span>
+                          <span className="text-gray-500">{lb.count.toLocaleString()} · {lb.pct}%</span>
+                        </div>
+                        <div className="h-1 rounded-full bg-gray-800">
+                          <div className="h-1 rounded-full transition-all" style={{ width: `${barPct}%`, backgroundColor: color }} />
+                        </div>
+                      </div>
+                    )
+                  })}
+                  {labelSummary.unannotated > 0 && (
+                    <div className="pt-1 flex justify-between text-xs text-gray-600 border-t border-gray-800">
+                      <span>Unannotated</span>
+                      <span>{labelSummary.unannotated.toLocaleString()} · {Math.round(labelSummary.unannotated / labelSummary.total * 100)}%</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div className="flex flex-col gap-2 items-center">
               <button
                 onClick={() => {
