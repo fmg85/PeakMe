@@ -30,3 +30,4 @@ Thumbs.db
 .vscode/
 *.swp
 frontend/public/export_cardinal_pngs.R
+.mcp.json
