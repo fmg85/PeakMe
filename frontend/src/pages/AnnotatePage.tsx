@@ -73,11 +73,12 @@ export default function AnnotatePage() {
   const annotate = useCallback(async (label: LabelOption, direction: AnimDirection = 'right') => {
     if (!current) return
     const snapshot = current  // capture before async
+    const wasAlreadyAnnotated = !!snapshot.annotation  // don't inflate counter on re-annotation
     setAnim(direction)
     try {
       await apiClient.post(`/api/ions/${snapshot.id}/annotate`, { label_option_id: label.id })
       setUndoStack((s) => [...s, snapshot])
-      setSessionAnnotations((n) => n + 1)
+      if (!wasAlreadyAnnotated) setSessionAnnotations((n) => n + 1)
     } catch {
       setAnim(null)
       return

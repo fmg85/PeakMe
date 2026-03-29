@@ -7,6 +7,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## Unreleased
 
+- fix: session annotation counter no longer inflates when re-annotating an already-labelled ion (was counting upserts as new annotations, making progress display higher than actual DB count)
+
 ---
 
 ## 2026-03-29
