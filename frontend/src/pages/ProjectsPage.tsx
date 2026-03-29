@@ -15,6 +15,7 @@ export default function ProjectsPage() {
   // Profile state
   const [showProfile, setShowProfile] = useState(false)
   const [showChangelog, setShowChangelog] = useState(false)
+  const [confirmDeleteProjectId, setConfirmDeleteProjectId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
   const profileRef = useRef<HTMLDivElement>(null)
 
@@ -35,6 +36,11 @@ export default function ProjectsPage() {
       queryClient.invalidateQueries({ queryKey: ['me'] })
       setShowProfile(false)
     },
+  })
+
+  const deleteProject = useMutation({
+    mutationFn: (projectId: string) => apiClient.delete(`/api/projects/${projectId}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['projects'] }),
   })
 
   const createProject = useMutation({
@@ -193,34 +199,56 @@ export default function ProjectsPage() {
         ) : (
           <div className="space-y-3">
             {projects?.map((project) => (
-              <Link
-                key={project.id}
-                to={`/projects/${project.id}`}
-                className="block rounded-xl bg-gray-900 p-5 hover:bg-gray-800 transition-colors"
-              >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="font-semibold text-white">{project.name}</h3>
-                    {project.description && (
-                      <p className="mt-1 text-sm text-gray-400">{project.description}</p>
-                    )}
+              <div key={project.id} className="group relative rounded-xl bg-gray-900 hover:bg-gray-800 transition-colors">
+                <Link to={`/projects/${project.id}`} className="block p-5">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h3 className="font-semibold text-white">{project.name}</h3>
+                      {project.description && (
+                        <p className="mt-1 text-sm text-gray-400">{project.description}</p>
+                      )}
+                    </div>
+                    <div className="flex gap-2 flex-wrap justify-end ml-4">
+                      {project.label_options.slice(0, 5).map((l) => (
+                        <span
+                          key={l.id}
+                          className="rounded-full px-2 py-0.5 text-xs font-medium text-white"
+                          style={{ backgroundColor: l.color || '#6366f1' }}
+                        >
+                          {l.name}
+                        </span>
+                      ))}
+                      {project.label_options.length > 5 && (
+                        <span className="text-xs text-gray-500">+{project.label_options.length - 5}</span>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex gap-2 flex-wrap justify-end ml-4">
-                    {project.label_options.slice(0, 5).map((l) => (
-                      <span
-                        key={l.id}
-                        className="rounded-full px-2 py-0.5 text-xs font-medium text-white"
-                        style={{ backgroundColor: l.color || '#6366f1' }}
-                      >
-                        {l.name}
-                      </span>
-                    ))}
-                    {project.label_options.length > 5 && (
-                      <span className="text-xs text-gray-500">+{project.label_options.length - 5}</span>
-                    )}
-                  </div>
+                </Link>
+                {/* Delete control — sits outside the Link */}
+                <div className="absolute bottom-3 right-3" onClick={(e) => e.stopPropagation()}>
+                  {confirmDeleteProjectId === project.id ? (
+                    <div className="flex items-center gap-1.5 text-xs">
+                      <span className="text-gray-400">Delete project?</span>
+                      <button
+                        onClick={() => { deleteProject.mutate(project.id); setConfirmDeleteProjectId(null) }}
+                        className="rounded px-2 py-0.5 bg-red-600 text-white hover:bg-red-500 transition-colors"
+                      >Yes</button>
+                      <button
+                        onClick={() => setConfirmDeleteProjectId(null)}
+                        className="rounded px-2 py-0.5 bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors"
+                      >No</button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setConfirmDeleteProjectId(project.id)}
+                      className="text-gray-700 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 text-sm"
+                      title="Delete project"
+                    >
+                      ✕
+                    </button>
+                  )}
                 </div>
-              </Link>
+              </div>
             ))}
           </div>
         )}

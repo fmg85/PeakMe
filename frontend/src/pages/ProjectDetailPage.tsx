@@ -74,6 +74,7 @@ export default function ProjectDetailPage() {
 
   // inline label editing
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [confirmDeleteDatasetId, setConfirmDeleteDatasetId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
   const [editColor, setEditColor] = useState('')
   const [editShortcut, setEditShortcut] = useState('')
@@ -255,11 +256,23 @@ export default function ProjectDetailPage() {
                           </Link>
                         </>
                       )}
-                      {(ds.status === 'error' || ds.status === 'pending' || ds.status === 'processing') && (
+                      {confirmDeleteDatasetId === ds.id ? (
+                        <div className="flex items-center gap-1.5 text-xs">
+                          <span className="text-gray-400">Delete?</span>
+                          <button
+                            onClick={() => { deleteDataset.mutate(ds.id); setConfirmDeleteDatasetId(null) }}
+                            className="rounded px-2 py-0.5 bg-red-600 text-white hover:bg-red-500 transition-colors"
+                          >Yes</button>
+                          <button
+                            onClick={() => setConfirmDeleteDatasetId(null)}
+                            className="rounded px-2 py-0.5 bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors"
+                          >No</button>
+                        </div>
+                      ) : (
                         <button
-                          onClick={() => deleteDataset.mutate(ds.id)}
+                          onClick={() => setConfirmDeleteDatasetId(ds.id)}
                           className="text-gray-600 hover:text-red-400 transition-colors text-sm"
-                          title="Remove dataset"
+                          title="Delete dataset"
                         >
                           ✕
                         </button>
