@@ -36,6 +36,7 @@ export default function AnnotatePage() {
   const [anim, setAnim] = useState<AnimDirection>(null)
   const [layerIndex, setLayerIndex] = useState(0)
   const [strategy, setStrategy] = useState<'unannotated_first' | 'starred_first' | 'all'>('unannotated_first')
+  const [labelFilter, setLabelFilter] = useState<string | null>(null)
   const [sessionStarted, setSessionStarted] = useState(false)
   const [sessionAnnotations, setSessionAnnotations] = useState(0)
   // Snapshot of my_annotation_count at the moment the user clicks Resume/Start.
@@ -64,12 +65,13 @@ export default function AnnotatePage() {
   const { current, remaining, advance, updateCurrent, exhausted, forceReload, prependItem } = useAnnotationQueue({
     datasetId,
     strategy,
+    labelFilter,
   })
 
   const { data: labelSummary } = useQuery<DatasetLabelSummary>({
     queryKey: ['dataset-label-summary', datasetId],
     queryFn: () => apiClient.get(`/api/datasets/${datasetId}/label-summary`).then((r) => r.data),
-    enabled: !!datasetId && exhausted && sessionStarted,
+    enabled: !!datasetId && (dataset?.my_annotation_count ?? 0) > 0,
   })
 
   // No auto-start: always wait for dataset to load and show the session screen.
@@ -225,8 +227,17 @@ export default function AnnotatePage() {
   // Always shown (even first visit) so we never rely on async data for auto-start
   if (!sessionStarted && dataset) {
     const isFirstVisit = dataset.my_annotation_count === 0
+    const isFullyDone = !isFirstVisit && dataset.my_annotation_count >= total && total > 0
     const pct = total > 0 ? Math.round((dataset.my_annotation_count / total) * 100) : 0
     const left = Math.max(0, total - dataset.my_annotation_count)
+
+    const startSession = (strat: typeof strategy, filter: string | null = null) => {
+      setLabelFilter(filter)
+      setStrategy(strat)
+      setBaselineAnnotations(dataset.my_annotation_count)
+      setSessionStarted(true)
+    }
+
     return (
       <div className="flex h-screen flex-col bg-gray-950">
         <header className="flex items-center border-b border-gray-800 bg-gray-900 px-4 py-3">
@@ -234,8 +245,8 @@ export default function AnnotatePage() {
             ← {project?.name ?? 'Project'}
           </Link>
         </header>
-        <div className="flex flex-1 items-center justify-center p-6">
-          <div className="w-full max-w-sm space-y-6">
+        <div className="flex flex-1 items-center justify-center p-6 overflow-y-auto">
+          <div className="w-full max-w-sm space-y-6 py-4">
             <div>
               <h1 className="text-xl font-bold text-white">{dataset.name}</h1>
               <p className="mt-1 text-sm text-gray-400">
@@ -251,22 +262,26 @@ export default function AnnotatePage() {
             </div>
 
             <div className="space-y-3">
-              <button
-                onClick={() => { setBaselineAnnotations(dataset.my_annotation_count); setStrategy('unannotated_first'); setSessionStarted(true) }}
-                className="w-full rounded-xl bg-brand-orange px-4 py-3 text-left font-medium text-white hover:bg-brand-red transition-colors"
-              >
-                <div>{isFirstVisit ? '▶ Start annotating' : '▶ Resume'}</div>
-                <div className="text-sm font-normal opacity-80 mt-0.5">
-                  {isFirstVisit
-                    ? `Annotate ${total.toLocaleString()} ions in order`
-                    : `Continue from where you left off · ${left.toLocaleString()} ion${left !== 1 ? 's' : ''} remaining`}
-                </div>
-              </button>
+              {/* Primary action — only show Resume when there are unannotated ions left */}
+              {!isFullyDone && (
+                <button
+                  onClick={() => startSession('unannotated_first')}
+                  className="w-full rounded-xl bg-brand-orange px-4 py-3 text-left font-medium text-white hover:bg-brand-red transition-colors"
+                >
+                  <div>{isFirstVisit ? '▶ Start annotating' : '▶ Resume'}</div>
+                  <div className="text-sm font-normal opacity-80 mt-0.5">
+                    {isFirstVisit
+                      ? `Annotate ${total.toLocaleString()} ions in order`
+                      : `Continue from where you left off · ${left.toLocaleString()} ion${left !== 1 ? 's' : ''} remaining`}
+                  </div>
+                </button>
+              )}
+
               {!isFirstVisit && (
                 <>
                   <button
-                    onClick={() => { setBaselineAnnotations(dataset.my_annotation_count); setStrategy('all'); setSessionStarted(true) }}
-                    className="w-full rounded-xl bg-gray-800 px-4 py-3 text-left font-medium text-white hover:bg-gray-700 transition-colors"
+                    onClick={() => startSession('all')}
+                    className={`w-full rounded-xl px-4 py-3 text-left font-medium text-white transition-colors ${isFullyDone ? 'bg-brand-orange hover:bg-brand-red' : 'bg-gray-800 hover:bg-gray-700'}`}
                   >
                     <div>↩ Start from the beginning</div>
                     <div className="text-sm font-normal text-gray-400 mt-0.5">
@@ -274,7 +289,7 @@ export default function AnnotatePage() {
                     </div>
                   </button>
                   <button
-                    onClick={() => { setBaselineAnnotations(dataset.my_annotation_count); setStrategy('starred_first'); setSessionStarted(true) }}
+                    onClick={() => startSession('starred_first')}
                     className="w-full rounded-xl bg-gray-800 px-4 py-3 text-left font-medium text-yellow-400 hover:bg-gray-700 transition-colors"
                   >
                     <div>★ Review starred only</div>
@@ -283,6 +298,35 @@ export default function AnnotatePage() {
                 </>
               )}
             </div>
+
+            {/* Review by label — shown once there are annotated ions with label breakdown */}
+            {labelSummary && labelSummary.labels.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Review by label</p>
+                <div className="space-y-2">
+                  {labelSummary.labels.map((lb) => {
+                    const labelOption = project?.label_options.find((l) => l.name === lb.label_name)
+                    const color = labelOption?.color ?? '#6366f1'
+                    return (
+                      <button
+                        key={lb.label_name}
+                        onClick={() => startSession('all', lb.label_name)}
+                        className="w-full rounded-xl bg-gray-900 border border-gray-800 px-4 py-3 text-left hover:border-gray-600 transition-colors"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+                            <span className="font-medium text-white">{lb.label_name}</span>
+                          </div>
+                          <span className="text-sm text-gray-400">{lb.count.toLocaleString()} ions · {lb.pct}%</span>
+                        </div>
+                        <div className="text-xs text-gray-500 mt-0.5 pl-5">Review and re-annotate this category</div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -300,7 +344,15 @@ export default function AnnotatePage() {
           <p className="text-sm font-medium text-white">{dataset?.name}</p>
           {dataset && (
             <p className="text-xs text-gray-500">
-              {strategy === 'unannotated_first'
+              {labelFilter
+                ? (() => {
+                    const color = project?.label_options.find((l) => l.name === labelFilter)?.color
+                    return <span className="flex items-center justify-center gap-1">
+                      {color && <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: color }} />}
+                      Reviewing: {labelFilter} · {sessionAnnotations.toLocaleString()} done
+                    </span>
+                  })()
+                : strategy === 'unannotated_first'
                 ? `${annotated.toLocaleString()} / ${total.toLocaleString()} annotated${remaining_unannotated > 0 ? ` · ${remaining_unannotated.toLocaleString()} left` : ''}`
                 : strategy === 'all'
                 ? `Reviewing all · ${sessionAnnotations.toLocaleString()} / ${total.toLocaleString()}`
@@ -374,8 +426,10 @@ export default function AnnotatePage() {
                   setSessionStarted(false)
                   setSessionAnnotations(0)
                   setBaselineAnnotations(0)
+                  setLabelFilter(null)
                   setUndoStack([])
                   queryClient.invalidateQueries({ queryKey: ['dataset', datasetId] })
+                  queryClient.invalidateQueries({ queryKey: ['dataset-label-summary', datasetId] })
                 }}
                 className="w-48 rounded-lg bg-brand-orange px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-red transition-colors"
               >

@@ -8,9 +8,10 @@ const PREFETCH_AHEAD = 5
 interface UseAnnotationQueueOptions {
   datasetId: string
   strategy?: 'unannotated_first' | 'starred_first' | 'all'
+  labelFilter?: string | null
 }
 
-export function useAnnotationQueue({ datasetId, strategy = 'unannotated_first' }: UseAnnotationQueueOptions) {
+export function useAnnotationQueue({ datasetId, strategy = 'unannotated_first', labelFilter = null }: UseAnnotationQueueOptions) {
   const [queue, setQueue] = useState<IonQueueItem[]>([])
   // Cursor: sort_order of the last item fetched. -1 means "fetch from beginning".
   // Cursor-based pagination ensures we never skip ions that get annotated mid-session
@@ -26,12 +27,14 @@ export function useAnnotationQueue({ datasetId, strategy = 'unannotated_first' }
   const forceReload = useCallback(() => setReloadKey((k) => k + 1), [])
 
   const fetchBatch = useCallback(async (afterSortOrder: number): Promise<IonQueueItem[]> => {
+    const params: Record<string, unknown> = { limit: BATCH_SIZE, strategy, after_sort_order: afterSortOrder }
+    if (labelFilter) params.label_filter = labelFilter
     const { data } = await apiClient.get<IonQueueItem[]>(
       `/api/datasets/${datasetId}/ions/queue`,
-      { params: { limit: BATCH_SIZE, strategy, after_sort_order: afterSortOrder } }
+      { params }
     )
     return data
-  }, [datasetId, strategy])
+  }, [datasetId, strategy, labelFilter])
 
   // Initial load
   useEffect(() => {
@@ -49,7 +52,7 @@ export function useAnnotationQueue({ datasetId, strategy = 'unannotated_first' }
       })
       initializedRef.current = true
     })
-  }, [datasetId, strategy, reloadKey])
+  }, [datasetId, strategy, labelFilter, reloadKey])
 
   // Prefetch next batch when queue gets low
   useEffect(() => {

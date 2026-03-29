@@ -30,11 +30,14 @@ async def get_ion_queue(
     limit: int = Query(default=20, ge=1, le=100),
     strategy: QueueStrategy = Query(default="unannotated_first"),
     after_sort_order: int = Query(default=-1),
+    label_filter: str | None = Query(default=None),
 ):
     """
     Return an ordered list of ions for annotation.
     Uses cursor-based pagination via after_sort_order (sort_order of the last
     item in the previous batch) to avoid skipping ions as they get annotated.
+    label_filter (optional): restrict to ions the current user annotated with
+    that label_name, for targeted review sessions.
     Includes presigned image URLs, star status, and existing annotation for this user.
     """
     result = await db.execute(select(Dataset).where(Dataset.id == dataset_id))
@@ -47,7 +50,14 @@ async def get_ion_queue(
         Ion.sort_order > after_sort_order,
     )
 
-    if strategy == "unannotated_first":
+    if label_filter is not None:
+        # Restrict to ions the current user has annotated with this label
+        label_subq = select(Annotation.ion_id).where(
+            Annotation.user_id == current_user.id,
+            Annotation.label_name == label_filter,
+        )
+        query = query.where(Ion.id.in_(label_subq))
+    elif strategy == "unannotated_first":
         # Ions this user hasn't annotated yet, ordered by sort_order
         annotated_subq = select(Annotation.ion_id).where(
             Annotation.user_id == current_user.id
