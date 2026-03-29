@@ -61,15 +61,15 @@ export default function AnnotatePage() {
     enabled: !!datasetId,
   })
 
+  const { current, remaining, advance, updateCurrent, exhausted, forceReload, prependItem } = useAnnotationQueue({
+    datasetId,
+    strategy,
+  })
+
   const { data: labelSummary } = useQuery<DatasetLabelSummary>({
     queryKey: ['dataset-label-summary', datasetId],
     queryFn: () => apiClient.get(`/api/datasets/${datasetId}/label-summary`).then((r) => r.data),
     enabled: !!datasetId && exhausted && sessionStarted,
-  })
-
-  const { current, remaining, advance, updateCurrent, exhausted, forceReload, prependItem } = useAnnotationQueue({
-    datasetId,
-    strategy,
   })
 
   // No auto-start: always wait for dataset to load and show the session screen.
