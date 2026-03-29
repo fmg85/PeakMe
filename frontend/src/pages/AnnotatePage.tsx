@@ -30,7 +30,7 @@ export default function AnnotatePage() {
   const [strategy, setStrategy] = useState<'unannotated_first' | 'starred_first' | 'all'>('unannotated_first')
   const [sessionStarted, setSessionStarted] = useState(false)
   const [sessionAnnotations, setSessionAnnotations] = useState(0)
-  const lastAnnotationRef = useRef<{ ionId: string; labelId: string } | null>(null)
+  const [undoStack, setUndoStack] = useState<string[]>([])  // ionIds, most-recent last
 
   // Drag state for swipe gesture
   const [dragXY, setDragXY] = useState<[number, number]>([0, 0])
@@ -72,10 +72,11 @@ export default function AnnotatePage() {
 
   const annotate = useCallback(async (label: LabelOption, direction: AnimDirection = 'right') => {
     if (!current) return
-    lastAnnotationRef.current = { ionId: current.id, labelId: label.id }
+    const ionId = current.id
     setAnim(direction)
     try {
-      await apiClient.post(`/api/ions/${current.id}/annotate`, { label_option_id: label.id })
+      await apiClient.post(`/api/ions/${ionId}/annotate`, { label_option_id: label.id })
+      setUndoStack((s) => [...s, ionId])
       setSessionAnnotations((n) => n + 1)
     } catch {
       setAnim(null)
@@ -91,12 +92,13 @@ export default function AnnotatePage() {
   }, [current, updateCurrent])
 
   const undo = useCallback(async () => {
-    const last = lastAnnotationRef.current
-    if (!last) return
-    lastAnnotationRef.current = null
-    await apiClient.delete(`/api/ions/${last.ionId}/annotate`)
+    if (undoStack.length === 0) return
+    const ionId = undoStack[undoStack.length - 1]
+    setUndoStack((s) => s.slice(0, -1))
+    setSessionAnnotations((n) => Math.max(0, n - 1))
+    await apiClient.delete(`/api/ions/${ionId}/annotate`)
     forceReload()
-  }, [forceReload])
+  }, [undoStack, forceReload])
 
   // Swipe gesture
   const bind = useDrag(({ down, movement: [mx, my], velocity: [vx, vy], cancel }) => {
@@ -287,6 +289,7 @@ export default function AnnotatePage() {
                 onClick={() => {
                   setSessionStarted(false)
                   setSessionAnnotations(0)
+                  setUndoStack([])
                   queryClient.invalidateQueries({ queryKey: ['dataset', datasetId] })
                 }}
                 className="w-48 rounded-lg bg-brand-orange px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-red transition-colors"
@@ -388,7 +391,7 @@ export default function AnnotatePage() {
               </button>
               <button
                 onClick={undo}
-                disabled={!lastAnnotationRef.current}
+                disabled={undoStack.length === 0}
                 className="flex items-center gap-1.5 rounded-lg bg-gray-800 px-4 py-2 text-sm font-medium text-gray-400 hover:text-white hover:bg-gray-700 disabled:opacity-30 transition-colors"
                 title="Undo (Z)"
               >
