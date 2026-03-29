@@ -420,8 +420,7 @@ export default function AnnotatePage() {
                   />
                 )}
 
-                {/* Overlay: ion image with fluorescence outline on top.
-                    mix-blend-mode: multiply makes white areas transparent. */}
+                {/* Overlay: ion image with transparent-PNG fluorescence outline on top. */}
                 {currentLayer === 'overlay' && (
                   <div className="absolute inset-0">
                     <img
@@ -435,7 +434,6 @@ export default function AnnotatePage() {
                       src={dataset?.fluorescence_outline_url!}
                       alt="Fluorescence outline"
                       className="absolute inset-0 w-full h-full block object-contain"
-                      style={{ mixBlendMode: 'multiply' }}
                       draggable={false}
                     />
                   </div>
