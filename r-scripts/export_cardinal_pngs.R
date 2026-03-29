@@ -47,7 +47,7 @@ if (interactive()) {
 
     # Option A: name of a variable already loaded in your R session
     #   (works for raw read-ins, peak-picked, aligned, filtered — anything)
-    msi_object = "msi",   # EDIT ME — run ls() to see your variable names
+    msi_object = "MSE_process",   # EDIT ME — run ls() to see your variable names
                            #           set to NULL to use Option B instead
 
     # Option B: path to a file to load from (imzML or RData)

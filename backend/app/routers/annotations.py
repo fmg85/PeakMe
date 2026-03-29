@@ -15,6 +15,7 @@ from app.models.annotation import Annotation
 from app.models.dataset import Dataset
 from app.models.ion import Ion
 from app.models.project import Project
+from app.models.star import IonStar
 from app.models.user import User
 from app.schemas.annotation import LabelCount, StatsOut, UserStats
 
@@ -32,7 +33,6 @@ async def export_annotations(
     Export all annotations for a project as CSV or JSON.
     Streams the response to handle large datasets.
     """
-    # Fetch all annotations for ions in this project
     result = await db.execute(
         select(Annotation, Ion, User)
         .join(Ion, Annotation.ion_id == Ion.id)
@@ -43,12 +43,21 @@ async def export_annotations(
     )
     rows = result.all()
 
+    # Batch-load all stars for this project
+    star_result = await db.execute(
+        select(IonStar.ion_id, IonStar.user_id)
+        .join(Ion, IonStar.ion_id == Ion.id)
+        .join(Dataset, Ion.dataset_id == Dataset.id)
+        .where(Dataset.project_id == project_id)
+    )
+    starred_set = {(r.ion_id, r.user_id) for r in star_result}
+
     if format == "csv":
         output = io.StringIO()
         writer = csv.writer(output)
         writer.writerow([
             "ion_id", "dataset_id", "mz_value", "label_name",
-            "label_option_id", "annotator", "annotator_id",
+            "label_option_id", "starred", "annotator", "annotator_id",
             "confidence", "time_spent_ms", "annotated_at", "updated_at",
         ])
         for annotation, ion, user in rows:
@@ -58,6 +67,7 @@ async def export_annotations(
                 ion.mz_value,
                 annotation.label_name,
                 str(annotation.label_option_id) if annotation.label_option_id else "",
+                (annotation.ion_id, user.id) in starred_set,
                 user.display_name,
                 str(user.id),
                 annotation.confidence or "",
@@ -80,6 +90,7 @@ async def export_annotations(
                 "mz_value": ion.mz_value,
                 "label_name": a.label_name,
                 "label_option_id": str(a.label_option_id) if a.label_option_id else None,
+                "starred": (a.ion_id, u.id) in starred_set,
                 "annotator": u.display_name,
                 "annotator_id": str(u.id),
                 "confidence": a.confidence,
@@ -114,7 +125,13 @@ async def export_dataset_annotations(
     )
     rows = result.all()
 
-    # Fetch dataset name for filename
+    # Batch-load stars for this dataset
+    star_result = await db.execute(
+        select(IonStar.ion_id, IonStar.user_id)
+        .where(IonStar.ion_id.in_([ion.id for _, ion, _ in rows]))
+    )
+    starred_set = {(r.ion_id, r.user_id) for r in star_result}
+
     ds_result = await db.execute(select(Dataset).where(Dataset.id == dataset_id))
     dataset = ds_result.scalar_one_or_none()
     safe_name = (dataset.name if dataset else str(dataset_id)).replace(" ", "_")
@@ -124,8 +141,8 @@ async def export_dataset_annotations(
         writer = csv.writer(output)
         writer.writerow([
             "ion_id", "mz_value", "label_name", "label_option_id",
-            "annotator", "annotator_id", "confidence", "time_spent_ms",
-            "annotated_at", "updated_at",
+            "starred", "annotator", "annotator_id",
+            "confidence", "time_spent_ms", "annotated_at", "updated_at",
         ])
         for annotation, ion, user in rows:
             writer.writerow([
@@ -133,6 +150,7 @@ async def export_dataset_annotations(
                 ion.mz_value,
                 annotation.label_name,
                 str(annotation.label_option_id) if annotation.label_option_id else "",
+                (annotation.ion_id, user.id) in starred_set,
                 user.display_name,
                 str(user.id),
                 annotation.confidence or "",
@@ -154,6 +172,7 @@ async def export_dataset_annotations(
                 "mz_value": ion.mz_value,
                 "label_name": a.label_name,
                 "label_option_id": str(a.label_option_id) if a.label_option_id else None,
+                "starred": (a.ion_id, u.id) in starred_set,
                 "annotator": u.display_name,
                 "annotator_id": str(u.id),
                 "confidence": a.confidence,

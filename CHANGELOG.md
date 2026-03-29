@@ -8,6 +8,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## Unreleased
 
 - fix: session annotation counter no longer inflates when re-annotating an already-labelled ion (was counting upserts as new annotations, making progress display higher than actual DB count)
+- feat: `starred` column added to annotation CSV/JSON exports (both project-wide and per-dataset)
+- feat: new `r-scripts/peakme_import.R` — attaches PeakMe labels back to MSImagingExperiment, creates `MSE_clean` by filtering unwanted labels
+- fix: `r-scripts/export_cardinal_pngs.R` default `msi_object` changed to `"MSE_process"`
 
 ---
 
