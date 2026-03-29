@@ -200,7 +200,7 @@ export default function ProjectsPage() {
           <div className="space-y-3">
             {projects?.map((project) => (
               <div key={project.id} className="group relative rounded-xl bg-gray-900 hover:bg-gray-800 transition-colors">
-                <Link to={`/projects/${project.id}`} className="block p-5">
+                <Link to={`/projects/${project.id}`} className="block p-5 pr-8">
                   <div className="flex items-start justify-between">
                     <div>
                       <h3 className="font-semibold text-white">{project.name}</h3>
@@ -225,7 +225,7 @@ export default function ProjectsPage() {
                   </div>
                 </Link>
                 {/* Delete control — sits outside the Link */}
-                <div className="absolute bottom-3 right-3" onClick={(e) => e.stopPropagation()}>
+                <div className="absolute top-3 right-3" onClick={(e) => e.stopPropagation()}>
                   {confirmDeleteProjectId === project.id ? (
                     <div className="flex items-center gap-1.5 text-xs">
                       <span className="text-gray-400">Delete project?</span>
