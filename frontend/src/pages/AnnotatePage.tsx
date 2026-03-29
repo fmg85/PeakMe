@@ -82,7 +82,7 @@ export default function AnnotatePage() {
       setAnim(null)
       return
     }
-    setTimeout(() => { advance(); setAnim(null) }, 250)
+    setTimeout(() => { advance(); setAnim(null) }, 320)
   }, [current, advance])
 
   const toggleStar = useCallback(async () => {
@@ -270,7 +270,7 @@ export default function AnnotatePage() {
       </div>
 
       {/* Main content */}
-      <div className="flex flex-1 flex-col items-center justify-center px-4 py-4 overflow-hidden">
+      <div className="flex flex-1 flex-col items-center justify-center px-4 py-2 overflow-hidden">
         {exhausted && !current ? (
           <div className="text-center space-y-4 max-w-sm">
             <div className="text-5xl">🎉</div>
@@ -319,7 +319,7 @@ export default function AnnotatePage() {
         ) : current ? (
           <>
             {/* m/z label */}
-            <p className="mb-3 text-sm text-gray-400 font-mono flex-shrink-0">
+            <p className="mb-1 text-sm text-gray-400 font-mono flex-shrink-0">
               m/z = <span className="text-white font-semibold">{current.mz_value.toFixed(4)}</span>
               {current.annotation && (
                 <span className="ml-3 text-indigo-400">← previously: {current.annotation.label_name}</span>
@@ -327,7 +327,7 @@ export default function AnnotatePage() {
             </p>
 
             {/* Swipe arena — card + edge labels */}
-            <div className="relative flex items-center justify-center" style={{ width: 'min(55vmin, 90vw)', height: 'min(55vmin, 90vw)' }}>
+            <div className="relative flex items-center justify-center" style={{ width: 'min(calc(100vh - 230px), calc(100vw - 32px))', height: 'min(calc(100vh - 230px), calc(100vw - 32px))' }}>
 
               {/* Edge labels — shown while dragging */}
               <SwipeEdge dir="left"  label={swipeMap.left}  active={dragDir === 'left'}  committed={committed && dragDir === 'left'}  opacity={(dragDir === 'left'  && isDragging) ? Math.min(1, (dragDist - SWIPE_HINT) / (SWIPE_COMMIT - SWIPE_HINT)) : 0} />
@@ -336,11 +336,14 @@ export default function AnnotatePage() {
               <SwipeEdge dir="down"  label={swipeMap.down}  active={dragDir === 'down'}  committed={committed && dragDir === 'down'}  opacity={(dragDir === 'down'  && isDragging) ? Math.min(1, (dragDist - SWIPE_HINT) / (SWIPE_COMMIT - SWIPE_HINT)) : 0} />
 
               {/* Ion image card — key={current.id} forces a fresh DOM element per ion so
-                  React never reuses the element from the previous card's fly-off animation. */}
+                  React never reuses the element from the previous card's fly-off animation.
+                  animate-fade-in plays on mount (opacity 0→1, 0.2s); the transform
+                  transition handles exit without conflicting since fadeIn no longer
+                  animates transform. */}
               <div
                 key={current.id}
                 {...bind()}
-                className="absolute inset-0 rounded-xl overflow-hidden shadow-2xl"
+                className={`absolute inset-0 rounded-xl overflow-hidden shadow-2xl${!isDragging && !anim ? ' animate-fade-in' : ''}`}
                 style={cardStyle}
                 onClick={() => { if (!isDragging) setZoomed((z) => !z) }}
               >
@@ -358,7 +361,7 @@ export default function AnnotatePage() {
             </div>
 
             {/* Label buttons */}
-            <div className="mt-5 flex flex-wrap justify-center gap-2 max-w-lg flex-shrink-0">
+            <div className="mt-3 flex flex-wrap justify-center gap-2 max-w-lg flex-shrink-0">
               {project?.label_options.map((label, i) => (
                 <button
                   key={label.id}
@@ -378,7 +381,7 @@ export default function AnnotatePage() {
             </div>
 
             {/* Star + Undo */}
-            <div className="mt-3 flex items-center gap-4 flex-shrink-0">
+            <div className="mt-2 flex items-center gap-4 flex-shrink-0">
               <button
                 onClick={toggleStar}
                 className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition-colors

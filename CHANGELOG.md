@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - fix: annotation progress bar now tracks live during a session (was using queue buffer size, not actual annotation count)
 - feat: header shows "X left" count during resume mode
 - fix: swipe animation — card no longer "flips back" after being swiped off screen (was caused by React reusing the same DOM element; fixed with key={ion.id})
+- fix: swipe animation — card now fully exits before next card appears (timeout was 250ms, transition 300ms; fixed to 320ms)
+- feat: ion image is now significantly larger — fills available screen height instead of fixed vmin size
+- feat: new card fades in smoothly after each annotation
 
 ---
 

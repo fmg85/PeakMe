@@ -25,8 +25,8 @@ export default {
           '100%': { transform: 'translateX(120%) rotate(15deg)', opacity: '0' },
         },
         fadeIn: {
-          '0%': { opacity: '0', transform: 'scale(0.97)' },
-          '100%': { opacity: '1', transform: 'scale(1)' },
+          '0%': { opacity: '0' },
+          '100%': { opacity: '1' },
         },
       },
     },
