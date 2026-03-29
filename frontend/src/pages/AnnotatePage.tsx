@@ -52,12 +52,9 @@ export default function AnnotatePage() {
     strategy,
   })
 
-  // Auto-start immediately if this is the user's first visit (nothing annotated yet)
-  useEffect(() => {
-    if (dataset && !sessionStarted && dataset.my_annotation_count === 0) {
-      setSessionStarted(true)
-    }
-  }, [dataset, sessionStarted])
+  // No auto-start: always wait for dataset to load and show the session screen.
+  // (Previous auto-start on my_annotation_count===0 was unreliable because
+  // React Query could serve a stale cached 0 before fresh data arrived.)
 
   // Invalidate the project's dataset list when leaving, so ProjectDetailPage
   // always shows fresh annotation counts without a manual refresh
@@ -134,9 +131,14 @@ export default function AnnotatePage() {
     return () => window.removeEventListener('keydown', handleKey)
   }, [project, annotate, toggleStar, undo])
 
-  const annotated = (dataset?.my_annotation_count ?? 0) + sessionAnnotations
   const total = dataset?.total_ions ?? 0
-  const remaining_unannotated = Math.max(0, total - annotated)
+  // For resume mode: show overall annotation progress.
+  // For "all" / "starred" modes: show position within this review session only
+  // (starting from 1), so the counter doesn't jump to 500+ on the first swipe.
+  const annotated = strategy === 'unannotated_first'
+    ? (dataset?.my_annotation_count ?? 0) + sessionAnnotations
+    : sessionAnnotations
+  const remaining_unannotated = Math.max(0, total - (dataset?.my_annotation_count ?? 0) - (strategy === 'unannotated_first' ? sessionAnnotations : 0))
   const progress = total > 0 ? Math.round((annotated / total) * 100) : 0
 
   // Derived drag values
@@ -168,9 +170,11 @@ export default function AnnotatePage() {
     )
   }
 
-  // Session start screen — shown when returning to a partially-annotated dataset
+  // Session start screen — shown until the user picks a mode
+  // Always shown (even first visit) so we never rely on async data for auto-start
   if (!sessionStarted && dataset) {
-    const pct = total > 0 ? Math.round(((dataset.my_annotation_count) / total) * 100) : 0
+    const isFirstVisit = dataset.my_annotation_count === 0
+    const pct = total > 0 ? Math.round((dataset.my_annotation_count / total) * 100) : 0
     const left = Math.max(0, total - dataset.my_annotation_count)
     return (
       <div className="flex h-screen flex-col bg-gray-950">
@@ -184,11 +188,15 @@ export default function AnnotatePage() {
             <div>
               <h1 className="text-xl font-bold text-white">{dataset.name}</h1>
               <p className="mt-1 text-sm text-gray-400">
-                {dataset.my_annotation_count.toLocaleString()} of {total.toLocaleString()} ions annotated ({pct}%)
+                {isFirstVisit
+                  ? `${total.toLocaleString()} ions ready to annotate`
+                  : `${dataset.my_annotation_count.toLocaleString()} of ${total.toLocaleString()} ions annotated (${pct}%)`}
               </p>
-              <div className="mt-3 h-2 rounded-full bg-gray-800">
-                <div className="h-2 rounded-full bg-brand-orange transition-all" style={{ width: `${pct}%` }} />
-              </div>
+              {!isFirstVisit && (
+                <div className="mt-3 h-2 rounded-full bg-gray-800">
+                  <div className="h-2 rounded-full bg-brand-orange transition-all" style={{ width: `${pct}%` }} />
+                </div>
+              )}
             </div>
 
             <div className="space-y-3">
@@ -196,28 +204,32 @@ export default function AnnotatePage() {
                 onClick={() => { setStrategy('unannotated_first'); setSessionStarted(true) }}
                 className="w-full rounded-xl bg-brand-orange px-4 py-3 text-left font-medium text-white hover:bg-brand-red transition-colors"
               >
-                <div>▶ Resume</div>
+                <div>{isFirstVisit ? '▶ Start annotating' : '▶ Resume'}</div>
                 <div className="text-sm font-normal opacity-80 mt-0.5">
-                  Continue from where you left off · {left.toLocaleString()} ion{left !== 1 ? 's' : ''} remaining
+                  {isFirstVisit
+                    ? `Annotate ${total.toLocaleString()} ions in order`
+                    : `Continue from where you left off · ${left.toLocaleString()} ion${left !== 1 ? 's' : ''} remaining`}
                 </div>
               </button>
-              <button
-                onClick={() => { setStrategy('all'); setSessionStarted(true) }}
-                className="w-full rounded-xl bg-gray-800 px-4 py-3 text-left font-medium text-white hover:bg-gray-700 transition-colors"
-              >
-                <div>↩ Start from the beginning</div>
-                <div className="text-sm font-normal text-gray-400 mt-0.5">
-                  Review all {total.toLocaleString()} ions — re-annotate or change answers
-                </div>
-              </button>
-              {dataset.my_annotation_count > 0 && (
-                <button
-                  onClick={() => { setStrategy('starred_first'); setSessionStarted(true) }}
-                  className="w-full rounded-xl bg-gray-800 px-4 py-3 text-left font-medium text-yellow-400 hover:bg-gray-700 transition-colors"
-                >
-                  <div>★ Review starred only</div>
-                  <div className="text-sm font-normal text-gray-400 mt-0.5">Go through ions you flagged for review</div>
-                </button>
+              {!isFirstVisit && (
+                <>
+                  <button
+                    onClick={() => { setStrategy('all'); setSessionStarted(true) }}
+                    className="w-full rounded-xl bg-gray-800 px-4 py-3 text-left font-medium text-white hover:bg-gray-700 transition-colors"
+                  >
+                    <div>↩ Start from the beginning</div>
+                    <div className="text-sm font-normal text-gray-400 mt-0.5">
+                      Review all {total.toLocaleString()} ions — re-annotate or change answers
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => { setStrategy('starred_first'); setSessionStarted(true) }}
+                    className="w-full rounded-xl bg-gray-800 px-4 py-3 text-left font-medium text-yellow-400 hover:bg-gray-700 transition-colors"
+                  >
+                    <div>★ Review starred only</div>
+                    <div className="text-sm font-normal text-gray-400 mt-0.5">Go through ions you flagged for review</div>
+                  </button>
+                </>
               )}
             </div>
           </div>
@@ -237,8 +249,11 @@ export default function AnnotatePage() {
           <p className="text-sm font-medium text-white">{dataset?.name}</p>
           {dataset && (
             <p className="text-xs text-gray-500">
-              {annotated.toLocaleString()} / {total.toLocaleString()} annotated
-              {strategy === 'unannotated_first' && remaining_unannotated > 0 && ` · ${remaining_unannotated.toLocaleString()} left`}
+              {strategy === 'unannotated_first'
+                ? `${annotated.toLocaleString()} / ${total.toLocaleString()} annotated${remaining_unannotated > 0 ? ` · ${remaining_unannotated.toLocaleString()} left` : ''}`
+                : strategy === 'all'
+                ? `Reviewing all · ${sessionAnnotations.toLocaleString()} / ${total.toLocaleString()}`
+                : `Starred · ${sessionAnnotations.toLocaleString()} reviewed`}
             </p>
           )}
         </div>
