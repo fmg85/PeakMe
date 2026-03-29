@@ -12,7 +12,11 @@ interface UseAnnotationQueueOptions {
 
 export function useAnnotationQueue({ datasetId, strategy = 'unannotated_first' }: UseAnnotationQueueOptions) {
   const [queue, setQueue] = useState<IonQueueItem[]>([])
-  const [offset, setOffset] = useState(0)
+  // Cursor: sort_order of the last item fetched. -1 means "fetch from beginning".
+  // Cursor-based pagination ensures we never skip ions that get annotated mid-session
+  // (offset-based pagination would shift the window as annotated ions disappear from
+  // the filtered result set, causing gaps).
+  const [cursor, setCursor] = useState(-1)
   const [exhausted, setExhausted] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
   const prefetchingRef = useRef(false)
@@ -21,10 +25,10 @@ export function useAnnotationQueue({ datasetId, strategy = 'unannotated_first' }
 
   const forceReload = useCallback(() => setReloadKey((k) => k + 1), [])
 
-  const fetchBatch = useCallback(async (batchOffset: number): Promise<IonQueueItem[]> => {
+  const fetchBatch = useCallback(async (afterSortOrder: number): Promise<IonQueueItem[]> => {
     const { data } = await apiClient.get<IonQueueItem[]>(
       `/api/datasets/${datasetId}/ions/queue`,
-      { params: { limit: BATCH_SIZE, strategy, offset: batchOffset } }
+      { params: { limit: BATCH_SIZE, strategy, after_sort_order: afterSortOrder } }
     )
     return data
   }, [datasetId, strategy])
@@ -33,11 +37,11 @@ export function useAnnotationQueue({ datasetId, strategy = 'unannotated_first' }
   useEffect(() => {
     initializedRef.current = false
     setQueue([])
-    setOffset(0)
+    setCursor(-1)
     setExhausted(false)
-    fetchBatch(0).then((items) => {
+    fetchBatch(-1).then((items) => {
       setQueue(items)
-      setOffset(items.length)
+      if (items.length > 0) setCursor(items[items.length - 1].sort_order)
       if (items.length < BATCH_SIZE) setExhausted(true)
       items.forEach((item) => {
         prefetchImage(item.image_url)
@@ -52,9 +56,9 @@ export function useAnnotationQueue({ datasetId, strategy = 'unannotated_first' }
     if (!initializedRef.current) return
     if (queue.length <= PREFETCH_AHEAD && !exhausted && !prefetchingRef.current) {
       prefetchingRef.current = true
-      fetchBatch(offset).then((items) => {
+      fetchBatch(cursor).then((items) => {
         setQueue((prev) => [...prev, ...items])
-        setOffset((prev) => prev + items.length)
+        if (items.length > 0) setCursor(items[items.length - 1].sort_order)
         if (items.length < BATCH_SIZE) setExhausted(true)
         items.forEach((item) => {
           prefetchImage(item.image_url)
@@ -63,7 +67,7 @@ export function useAnnotationQueue({ datasetId, strategy = 'unannotated_first' }
         prefetchingRef.current = false
       })
     }
-  }, [queue.length, exhausted, offset, fetchBatch])
+  }, [queue.length, exhausted, cursor, fetchBatch])
 
   const current = queue[0] ?? null
   const remaining = queue.length

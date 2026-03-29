@@ -29,18 +29,23 @@ async def get_ion_queue(
     db: AsyncSession = Depends(get_db),
     limit: int = Query(default=20, ge=1, le=100),
     strategy: QueueStrategy = Query(default="unannotated_first"),
-    offset: int = Query(default=0, ge=0),
+    after_sort_order: int = Query(default=-1),
 ):
     """
     Return an ordered list of ions for annotation.
+    Uses cursor-based pagination via after_sort_order (sort_order of the last
+    item in the previous batch) to avoid skipping ions as they get annotated.
     Includes presigned image URLs, star status, and existing annotation for this user.
     """
     result = await db.execute(select(Dataset).where(Dataset.id == dataset_id))
     if not result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Dataset not found")
 
-    # Base query: all ions for dataset
-    query = select(Ion).where(Ion.dataset_id == dataset_id)
+    # Base query: all ions for dataset after the cursor position
+    query = select(Ion).where(
+        Ion.dataset_id == dataset_id,
+        Ion.sort_order > after_sort_order,
+    )
 
     if strategy == "unannotated_first":
         # Ions this user hasn't annotated yet, ordered by sort_order
@@ -54,7 +59,7 @@ async def get_ion_queue(
         )
         query = query.where(Ion.id.in_(starred_subq))
 
-    query = query.order_by(Ion.sort_order).offset(offset).limit(limit)
+    query = query.order_by(Ion.sort_order).limit(limit)
     ions_result = await db.execute(query)
     ions = ions_result.scalars().all()
 
