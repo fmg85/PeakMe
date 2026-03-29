@@ -51,11 +51,43 @@ function OptionTable() {
   )
 }
 
+function ImportOptionTable() {
+  const rows = [
+    ['msi_object', '"MSE_process"', 'Name of your MSImagingExperiment variable in the R session'],
+    ['csv_file', '"peakme_annotations.csv"', 'Path to the CSV exported from PeakMe'],
+    ['multi_annotator', '"last"', 'When multiple annotators labelled the same ion: "first" or "last" (by timestamp)'],
+    ['labels_to_remove', 'c("matrix", "noise")', 'Labels to strip out when creating MSE_clean'],
+    ['unannotated', '"keep"', 'What to do with ions not in the CSV: "keep" (label = NA) or "remove"'],
+  ]
+  return (
+    <div className="overflow-x-auto rounded-lg border border-gray-800">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-gray-800 bg-gray-900">
+            <th className="px-4 py-2 text-left text-gray-400 font-medium">Setting</th>
+            <th className="px-4 py-2 text-left text-gray-400 font-medium">Default</th>
+            <th className="px-4 py-2 text-left text-gray-400 font-medium">Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(([opt, def, desc]) => (
+            <tr key={opt} className="border-b border-gray-800/50 hover:bg-gray-900/50">
+              <td className="px-4 py-2 font-mono text-xs text-green-300">{opt}</td>
+              <td className="px-4 py-2 font-mono text-xs text-gray-400">{def}</td>
+              <td className="px-4 py-2 text-gray-300">{desc}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 export default function InstructionsPage() {
-  const handleDownloadScript = () => {
+  const download = (filename: string) => {
     const a = document.createElement('a')
-    a.href = '/export_cardinal_pngs.R'
-    a.download = 'export_cardinal_pngs.R'
+    a.href = `/${filename}`
+    a.download = filename
     a.click()
   }
 
@@ -66,12 +98,18 @@ export default function InstructionsPage() {
           ← Projects
         </Link>
         <h1 className="text-xl font-bold text-white">Instructions</h1>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
           <button
-            onClick={handleDownloadScript}
+            onClick={() => download('export_cardinal_pngs.R')}
             className="rounded-lg bg-brand-orange px-4 py-2 text-sm font-medium text-white hover:bg-brand-red transition-colors"
           >
-            ↓ Download R Script
+            ↓ Export script
+          </button>
+          <button
+            onClick={() => download('peakme_import.R')}
+            className="rounded-lg bg-brand-purple px-4 py-2 text-sm font-medium text-white hover:opacity-90 transition-opacity"
+          >
+            ↓ Import script
           </button>
         </div>
       </header>
@@ -79,20 +117,43 @@ export default function InstructionsPage() {
       <main className="mx-auto max-w-3xl px-4 py-10 space-y-10">
 
         {/* Overview */}
-        <div className="rounded-xl bg-gray-900 p-6 space-y-3">
+        <div className="rounded-xl bg-gray-900 p-6 space-y-4">
           <h2 className="text-lg font-semibold text-white">Overview</h2>
           <p className="text-gray-300">
             PeakMe does not process raw mass spectrometry files server-side. Instead, you render
-            ion images locally using Cardinal (R), then upload a ZIP of PNGs to PeakMe. This keeps
-            the server lightweight and gives you full control over rendering parameters.
+            ion images locally using Cardinal (R), upload a ZIP of PNGs to PeakMe for annotation,
+            then import the labels back into R for downstream analysis.
           </p>
-          <div className="flex flex-col gap-1.5 text-sm text-gray-400">
-            {['1. Install R dependencies', '2. Run export_cardinal_pngs.R on your data', '3. Zip the output folder', '4. Upload the ZIP to PeakMe and create a dataset'].map((step) => (
-              <div key={step} className="flex items-center gap-2">
-                <span className="text-brand-orange">→</span>
-                <span>{step}</span>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="rounded-lg border border-brand-orange/30 bg-brand-orange/5 p-4 space-y-2">
+              <p className="text-sm font-semibold text-brand-orange">Part 1 — Export (R → PeakMe)</p>
+              <div className="flex flex-col gap-1 text-sm text-gray-400">
+                {['1. Install R dependencies', '2. Run export_cardinal_pngs.R', '3. Zip the output folder', '4. Upload the ZIP to PeakMe'].map((step) => (
+                  <div key={step} className="flex items-center gap-2">
+                    <span className="text-brand-orange">→</span>
+                    <span>{step}</span>
+                  </div>
+                ))}
               </div>
-            ))}
+            </div>
+            <div className="rounded-lg border border-brand-purple/30 bg-brand-purple/5 p-4 space-y-2">
+              <p className="text-sm font-semibold text-brand-purple">Part 2 — Import (PeakMe → R)</p>
+              <div className="flex flex-col gap-1 text-sm text-gray-400">
+                {['5. Annotate in PeakMe', '6. Export annotations CSV', '7. Run peakme_import.R', '8. Use MSE_process + MSE_clean'].map((step) => (
+                  <div key={step} className="flex items-center gap-2">
+                    <span className="text-brand-purple">→</span>
+                    <span>{step}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── PART 1 ── */}
+        <div className="rounded-lg border border-brand-orange/20 px-1">
+          <div className="px-4 py-3">
+            <span className="text-xs font-semibold uppercase tracking-widest text-brand-orange">Part 1 — Export (Cardinal → PeakMe)</span>
           </div>
         </div>
 
@@ -122,8 +183,8 @@ install.packages(c("viridis", "optparse", "png"))`}</CodeBlock>
             <p className="text-xs text-gray-400 pl-4">
               <strong className="text-gray-200">Option A</strong> — object already in your session (e.g. after loading or processing in Cardinal):
             </p>
-            <CodeBlock>{`msi_object = "msi",   # name of your MSImagingExperiment variable
-                       # run ls() in the Console to see what's loaded
+            <CodeBlock>{`msi_object = "MSE_process",  # name of your MSImagingExperiment variable
+                             # run ls() in the Console to see what's loaded
 msi_file   = NULL,`}</CodeBlock>
             <p className="text-xs text-gray-400 pl-4">
               <strong className="text-gray-200">Option B</strong> — load from a file (.imzML or .RData):
@@ -132,7 +193,7 @@ msi_file   = NULL,`}</CodeBlock>
 msi_file   = "C:/Users/YourName/data/sample.imzML",
              # or "C:/Users/YourName/experiment.RData"`}</CodeBlock>
             <p className="text-xs text-gray-400 pl-4">
-              If your .RData has multiple objects, the script auto-detects all <code className="rounded bg-gray-800 px-1 text-green-300">MSImagingExperiment</code>s and tells you their names — then you can switch to Option A and name the right one.
+              If your .RData has multiple objects, the script auto-detects all <code className="rounded bg-gray-800 px-1 text-green-300">MSImagingExperiment</code>s and tells you their names.
             </p>
             <ol className="text-sm text-gray-300 space-y-1 list-decimal list-inside" start={3}>
               <li>Also set <code className="rounded bg-gray-800 px-1 text-green-300">output</code> to where you want the PNGs saved</li>
@@ -171,9 +232,6 @@ Rscript export_cardinal_pngs.R \\
           <CodeBlock>{`filename,mz_value
 798.5432.png,798.5432
 799.1201.png,799.1201`}</CodeBlock>
-          <p className="text-xs text-gray-500">
-            You can create or edit this file manually if you have PNGs from a different source.
-          </p>
         </Section>
 
         {/* Step 4 */}
@@ -188,12 +246,70 @@ Rscript export_cardinal_pngs.R \\
           </ol>
         </Section>
 
+        {/* ── PART 2 ── */}
+        <div className="rounded-lg border border-brand-purple/20 px-1 mt-8">
+          <div className="px-4 py-3">
+            <span className="text-xs font-semibold uppercase tracking-widest text-brand-purple">Part 2 — Import (PeakMe → R)</span>
+          </div>
+        </div>
+
+        {/* Step 5 */}
+        <Section title="Step 5 — Export Annotations from PeakMe">
+          <p className="text-sm text-gray-400">
+            Once annotation is complete, download the CSV from PeakMe:
+          </p>
+          <ol className="space-y-2 text-sm text-gray-300 list-decimal list-inside">
+            <li>Go to your project page in PeakMe</li>
+            <li>Click <strong className="text-white">Export CSV</strong> next to the dataset (or project-wide)</li>
+            <li>Save the file — e.g. <code className="rounded bg-gray-800 px-1 text-green-300">peakme_annotations.csv</code></li>
+          </ol>
+          <p className="text-sm text-gray-400 mt-2">
+            The CSV contains one row per annotated ion with columns: <code className="rounded bg-gray-800 px-1 text-green-300">mz_value</code>, <code className="rounded bg-gray-800 px-1 text-green-300">label_name</code>, <code className="rounded bg-gray-800 px-1 text-green-300">starred</code>, <code className="rounded bg-gray-800 px-1 text-green-300">confidence</code>, <code className="rounded bg-gray-800 px-1 text-green-300">annotator</code>, and timestamps.
+          </p>
+        </Section>
+
+        {/* Step 6 */}
+        <Section title="Step 6 — Run the Import Script">
+          <p className="text-sm text-gray-400">
+            <code className="rounded bg-gray-800 px-1 text-green-300">peakme_import.R</code> reads the CSV, matches each annotation back to the correct m/z feature in your <code className="rounded bg-gray-800 px-1 text-green-300">MSImagingExperiment</code>, and creates a filtered object ready for downstream analysis.
+          </p>
+
+          <div className="mt-4 rounded-lg border border-brand-purple/40 bg-brand-purple/10 p-4 space-y-2">
+            <p className="text-sm font-semibold text-brand-purple">RStudio — recommended</p>
+            <ol className="text-sm text-gray-300 space-y-1 list-decimal list-inside">
+              <li>Make sure your <code className="rounded bg-gray-800 px-1 text-green-300">MSImagingExperiment</code> is loaded in the session (same object you exported from)</li>
+              <li>Open <code className="rounded bg-gray-800 px-1 text-green-300">peakme_import.R</code> and edit the config block:</li>
+            </ol>
+            <CodeBlock>{`msi_object       = "MSE_process",         # name of your MSE variable
+csv_file         = "peakme_annotations.csv", # path to the downloaded CSV
+labels_to_remove = c("matrix", "noise"),     # labels to strip for MSE_clean
+unannotated      = "keep"                    # "keep" or "remove" unannotated ions`}</CodeBlock>
+            <ol className="text-sm text-gray-300 space-y-1 list-decimal list-inside" start={3}>
+              <li>Press <kbd className="rounded bg-gray-700 px-1.5 py-0.5 text-xs">Ctrl+Shift+S</kbd> (Windows) or <kbd className="rounded bg-gray-700 px-1.5 py-0.5 text-xs">⌘⇧S</kbd> (Mac) to Source</li>
+              <li>The script prints a coverage summary and label breakdown in the Console</li>
+            </ol>
+          </div>
+
+          <h3 className="text-sm font-medium text-gray-300 mt-5">What the script produces</h3>
+          <p className="text-sm text-gray-400">It adds four columns to <code className="rounded bg-gray-800 px-1 text-green-300">fData()</code> of your existing MSE object:</p>
+          <CodeBlock>{`fData(MSE_process)$peakme_label      # "liver", "kidney", NA (unannotated), …
+fData(MSE_process)$peakme_starred    # TRUE / FALSE / NA
+fData(MSE_process)$peakme_confidence # 1 (low) · 2 (medium) · 3 (high) · NA
+fData(MSE_process)$peakme_annotator  # annotator display name · NA`}</CodeBlock>
+          <p className="text-sm text-gray-400">It also creates <code className="rounded bg-gray-800 px-1 text-green-300">MSE_clean</code> in your session — the same experiment with <code className="rounded bg-gray-800 px-1 text-green-300">labels_to_remove</code> features filtered out:</p>
+          <CodeBlock>{`# Example: 5,072 total → 655 noise/matrix removed → 4,417 features kept
+MSE_clean   # use this for downstream analysis, dimensionality reduction, etc.`}</CodeBlock>
+
+          <h3 className="text-sm font-medium text-gray-300 mt-4">Config reference:</h3>
+          <ImportOptionTable />
+        </Section>
+
         {/* Tips */}
         <Section title="Tips">
           <ul className="space-y-3 text-sm text-gray-300">
             <li className="flex gap-2">
               <span className="text-brand-orange flex-shrink-0">•</span>
-              <span><strong className="text-white">Large datasets:</strong> The script prints rate and ETA every 100 ions. A 5,000-ion dataset with 100k pixels typically takes a few minutes.</span>
+              <span><strong className="text-white">Large datasets:</strong> The export script prints rate and ETA every 100 ions. A 5,000-ion dataset with 100k pixels typically takes a few minutes.</span>
             </li>
             <li className="flex gap-2">
               <span className="text-brand-orange flex-shrink-0">•</span>
@@ -205,13 +321,17 @@ Rscript export_cardinal_pngs.R \\
             </li>
             <li className="flex gap-2">
               <span className="text-brand-orange flex-shrink-0">•</span>
-              <span><strong className="text-white">Normalization:</strong> TIC is standard for cross-tissue comparison. Use <code className="rounded bg-gray-800 px-1 text-green-300">none</code> if you've already normalized in Cardinal.</span>
+              <span><strong className="text-white">m/z matching:</strong> The import script uses exact float matching (the m/z values are bit-for-bit identical round-tripping through R → PostgreSQL → CSV → R). A nearest-neighbour fallback within 0.001 Da handles edge cases and warns you if it triggers.</span>
+            </li>
+            <li className="flex gap-2">
+              <span className="text-brand-orange flex-shrink-0">•</span>
+              <span><strong className="text-white">Multiple annotators:</strong> If several people annotated the same ion, set <code className="rounded bg-gray-800 px-1 text-green-300">multi_annotator = "last"</code> to keep the most recent label, or <code className="rounded bg-gray-800 px-1 text-green-300">"first"</code> to keep whichever appears first in the CSV.</span>
             </li>
             <li className="flex gap-2">
               <span className="text-brand-orange flex-shrink-0">•</span>
               <span>
-                <strong className="text-white">Subsetting m/z range:</strong> Pre-filter in R before exporting:
-                <CodeBlock>{'msi_subset <- msi[mz(msi) > 700 & mz(msi) < 900, ]\nsave(msi_subset, file = "subset_700_900.RData")'}</CodeBlock>
+                <strong className="text-white">Subsetting m/z range before export:</strong>
+                <CodeBlock>{'msi_subset <- MSE_process[mz(MSE_process) > 700 & mz(MSE_process) < 900, ]\n# then set msi_object = "msi_subset" in the export config'}</CodeBlock>
               </span>
             </li>
           </ul>

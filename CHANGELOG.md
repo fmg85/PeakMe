@@ -12,6 +12,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - feat: `starred` column added to annotation CSV/JSON exports (both project-wide and per-dataset)
 - feat: new `r-scripts/peakme_import.R` — attaches PeakMe labels back to MSImagingExperiment, creates `MSE_clean` by filtering unwanted labels
 - fix: `r-scripts/export_cardinal_pngs.R` default `msi_object` changed to `"MSE_process"`
+- feat: instructions page now has two download buttons (Export script + Import script) and a Part 2 section documenting the import workflow
 
 ---
 

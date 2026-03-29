@@ -1,20 +1,26 @@
-# Cardinal → PeakMe Export Workflow
+# Cardinal ↔ PeakMe Workflow
 
-This guide walks you through exporting MSI data from Cardinal (R) into the PNG format required by PeakMe.
+This guide covers both directions of the PeakMe R workflow:
+- **Part 1 — Export:** render ion images in R and upload to PeakMe for annotation
+- **Part 2 — Import:** pull PeakMe annotations back into R and create a filtered experiment
 
-## Overview
+---
 
-PeakMe does not process raw mass spectrometry files server-side. Instead, you render ion images locally using Cardinal, then upload a ZIP of PNGs to PeakMe. This keeps the server lightweight and gives you full control over rendering parameters.
+## Part 1 — Export (Cardinal → PeakMe)
 
-**Workflow:**
-1. Install dependencies in R
+### Overview
+
+PeakMe does not process raw mass spectrometry files server-side. Instead, you render ion images locally using Cardinal, then upload a ZIP of PNGs to PeakMe.
+
+**Steps:**
+1. Install R dependencies
 2. Run `export_cardinal_pngs.R` on your data
 3. Zip the output folder
 4. Upload the ZIP to PeakMe and create a dataset
 
 ---
 
-## 1. Install R Dependencies
+### 1. Install R Dependencies
 
 In R or RStudio:
 
@@ -28,23 +34,23 @@ install.packages(c("viridis", "optparse", "png"))
 
 ---
 
-## 2. Run the Export Script
+### 2. Run the Export Script
 
 Download `export_cardinal_pngs.R` from the PeakMe instructions page.
 
-### Option A: RStudio (interactive)
+#### Option A: RStudio (interactive)
 
-If your MSImagingExperiment is already loaded in your R session (raw, peak-picked, aligned — anything):
+If your MSImagingExperiment is already loaded in your R session:
 
 1. Open `export_cardinal_pngs.R` in RStudio
 2. Edit the config block near the top:
    ```r
-   msi_object = "msi"          # name of your variable — run ls() to check
+   msi_object = "MSE_process"     # name of your variable — run ls() to check
    output     = "./peakme_export"
    ```
 3. Click **Source** (Ctrl+Shift+S on Windows · Cmd+Shift+S on Mac)
 
-### Option B: Command line — from a file
+#### Option B: Command line — from a file
 
 ```bash
 # From an imzML file
@@ -61,7 +67,7 @@ Rscript export_cardinal_pngs.R \
   --zip
 ```
 
-### All Options
+#### All Options
 
 | Option | Default | Description |
 |---|---|---|
@@ -73,7 +79,7 @@ Rscript export_cardinal_pngs.R \
 
 ---
 
-## 3. Output Format
+### 3. Output Format
 
 The script produces:
 
@@ -95,7 +101,7 @@ filename,mz_value
 
 ---
 
-## 4. Upload to PeakMe
+### 4. Upload to PeakMe
 
 1. If you used `--zip`, a `peakme_export.zip` file was created automatically.
 2. If not, zip manually:
@@ -110,13 +116,81 @@ filename,mz_value
 
 ---
 
+## Part 2 — Import (PeakMe → R)
+
+After annotating in PeakMe, use `peakme_import.R` to attach labels back to your `MSImagingExperiment` and create a filtered object for downstream analysis.
+
+### 5. Export Annotations from PeakMe
+
+1. Go to your project or dataset page in PeakMe
+2. Click **Export CSV**
+3. Save the file, e.g. `peakme_annotations.csv`
+
+The CSV contains one row per annotated ion with columns: `mz_value`, `label_name`, `starred`, `confidence`, `annotator`, `annotated_at`, `updated_at`.
+
+---
+
+### 6. Run the Import Script
+
+Download `peakme_import.R` from the PeakMe instructions page.
+
+**Dependency:** only `Cardinal` (already installed from Part 1).
+
+#### RStudio (interactive)
+
+1. Make sure your `MSImagingExperiment` is loaded in the session (the same object you exported from)
+2. Open `peakme_import.R` and edit the config block:
+   ```r
+   msi_object       = "MSE_process"           # name of your MSE variable
+   csv_file         = "peakme_annotations.csv" # path to the PeakMe CSV
+   labels_to_remove = c("matrix", "noise")     # labels to strip for MSE_clean
+   unannotated      = "keep"                   # "keep" (label = NA) or "remove"
+   ```
+3. Click **Source** (Ctrl+Shift+S / Cmd+Shift+S)
+
+#### Config reference
+
+| Setting | Default | Description |
+|---|---|---|
+| `msi_object` | `"MSE_process"` | Name of your MSImagingExperiment variable in the R session |
+| `csv_file` | `"peakme_annotations.csv"` | Path to the CSV exported from PeakMe |
+| `multi_annotator` | `"last"` | When multiple annotators labelled the same ion: `"first"` or `"last"` (by timestamp) |
+| `labels_to_remove` | `c("matrix", "noise")` | Labels to strip out when creating `MSE_clean` |
+| `unannotated` | `"keep"` | What to do with ions not in the CSV: `"keep"` (label = NA) or `"remove"` |
+
+---
+
+### What the script produces
+
+**Annotation columns added to `fData()`** of your existing MSE object:
+
+```r
+fData(MSE_process)$peakme_label      # "liver", "kidney", NA (unannotated), …
+fData(MSE_process)$peakme_starred    # TRUE / FALSE / NA
+fData(MSE_process)$peakme_confidence # 1 (low) · 2 (medium) · 3 (high) · NA
+fData(MSE_process)$peakme_annotator  # annotator display name · NA
+```
+
+**`MSE_clean`** — a new MSImagingExperiment in your session with `labels_to_remove` features filtered out:
+
+```r
+# Example: 5,072 total → 655 noise/matrix removed → 4,417 features kept
+MSE_clean  # use this for downstream analysis, dimensionality reduction, etc.
+```
+
+The script also prints a coverage summary and label breakdown to the Console.
+
+---
+
 ## Tips
 
-- **Progress / ETA:** The script prints rate and estimated time remaining every 100 ions.
-- **Colormap choice:** `viridis` is perceptually uniform and colorblind-friendly. `magma` shows high-intensity regions with bright yellow/white, which some scientists prefer for sparse signals. Use the same colormap within a project for consistent comparison.
-- **Normalization:** RMS normalization works well for most peak-picked experiments. Use `none` if you have already normalized in your Cardinal workflow.
-- **Subsetting:** Export only a subset of m/z values by pre-filtering in R before running the script:
+- **Large datasets:** The export script prints rate and ETA every 100 ions.
+- **m/z matching:** The import script uses exact float matching. m/z values are bit-for-bit identical round-tripping through R → PostgreSQL → CSV → R. A nearest-neighbour fallback within 0.001 Da handles edge cases and warns you.
+- **Multiple annotators:** `multi_annotator = "last"` keeps the most recently updated label per ion; `"first"` keeps whichever row appears first in the CSV.
+- **Colormap:** `viridis` is perceptually uniform and colorblind-friendly. Use the same colormap within a project for consistent comparison.
+- **Normalization:** RMS works well for most peak-picked experiments. Use `none` if you have already normalized in your Cardinal workflow.
+- **Subsetting before export:**
   ```r
-  msi_subset <- msi[mz(msi) > 700 & mz(msi) < 900, ]
-  # then set msi_object = "msi_subset" in the config block
+  msi_subset <- MSE_process[mz(MSE_process) > 700 & mz(MSE_process) < 900, ]
+  # then set msi_object = "msi_subset" in the export config
   ```
