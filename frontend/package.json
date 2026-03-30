@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "cp ../r-scripts/export_cardinal_pngs.R public/export_cardinal_pngs.R && cp ../r-scripts/peakme_import.R public/peakme_import.R && cp ../CHANGELOG.md public/CHANGELOG.md && tsc && vite build",
+    "build": "cp ../r-scripts/peakme_import.R public/peakme_import.R && cp ../r-scripts/peakme_export.R public/peakme_export.R && cp ../CHANGELOG.md public/CHANGELOG.md && tsc && vite build",
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives"
   },

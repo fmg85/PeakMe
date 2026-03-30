@@ -14,7 +14,7 @@ PeakMe does not process raw mass spectrometry files server-side. Instead, you re
 
 **Steps:**
 1. Install R dependencies
-2. Run `export_cardinal_pngs.R` on your data
+2. Run `peakme_export.R` on your data
 3. Zip the output folder
 4. Upload the ZIP to PeakMe and create a dataset
 
@@ -36,13 +36,13 @@ install.packages(c("viridis", "optparse", "png"))
 
 ### 2. Run the PeakMe Import Script
 
-Download `export_cardinal_pngs.R` from the PeakMe instructions page (↓ PeakMe Import button).
+Download `peakme_export.R` from the PeakMe instructions page (↓ PeakMe Import button).
 
 #### Option A: RStudio (interactive)
 
 If your MSImagingExperiment is already loaded in your R session:
 
-1. Open `export_cardinal_pngs.R` in RStudio
+1. Open `peakme_export.R` in RStudio
 2. Edit the config block near the top:
    ```r
    msi_object = "MSE_process"     # name of your variable — run ls() to check
@@ -54,14 +54,14 @@ If your MSImagingExperiment is already loaded in your R session:
 
 ```bash
 # From an imzML file
-Rscript export_cardinal_pngs.R \
+Rscript peakme_import.R \
   --file /path/to/your/data.imzML \
   --output ./peakme_export \
   --normalize rms \
   --zip
 
 # From a saved .RData / .rda file
-Rscript export_cardinal_pngs.R \
+Rscript peakme_import.R \
   --file my_experiment.RData \
   --output ./peakme_export \
   --zip
@@ -118,7 +118,7 @@ filename,mz_value
 
 ## PeakMe Export (PeakMe → R)
 
-After annotating in PeakMe, use `peakme_import.R` to attach labels back to your `MSImagingExperiment` and create a filtered object for downstream analysis.
+After annotating in PeakMe, use `peakme_export.R` to attach labels back to your `MSImagingExperiment` and create a filtered object for downstream analysis.
 
 ### 5. Export Annotations from PeakMe
 
@@ -132,14 +132,14 @@ The CSV contains one row per annotated ion with columns: `mz_value`, `label_name
 
 ### 6. Run the PeakMe Export Script
 
-Download `peakme_import.R` from the PeakMe instructions page (↓ PeakMe Export button).
+Download `peakme_export.R` from the PeakMe instructions page (↓ PeakMe Export button).
 
 **Dependency:** only `Cardinal` (already installed from the PeakMe Import step).
 
 #### RStudio (interactive)
 
 1. Make sure your `MSImagingExperiment` is loaded in the session (the same object you exported from)
-2. Open `peakme_import.R` and edit the config block:
+2. Open `peakme_export.R` and edit the config block:
    ```r
    msi_object       = "MSE_process"           # name of your MSE variable
    csv_file         = "peakme_annotations.csv" # path to the PeakMe CSV

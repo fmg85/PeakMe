@@ -17,7 +17,7 @@ annotate each ion image by swiping or pressing keyboard shortcuts.
 - Vercel proxies `/api/*` → `https://api.peakme.now/api/*` (server-side, bypasses browser DNS filtering)
 - `VITE_API_URL` is intentionally unset — frontend uses relative `/api/` paths via the proxy
 - GitHub Actions auto-deploys to EC2 on push to `main` and runs `alembic upgrade head`
-- R script (`r-scripts/export_cardinal_pngs.R`) is auto-copied to `frontend/public/` at build time
+- R scripts (`r-scripts/peakme_import.R`, `r-scripts/peakme_export.R`) are auto-copied to `frontend/public/` at build time
 
 ## Branches
 
@@ -71,7 +71,8 @@ breaking: short description  # breaking change (rare)
 
 | What | Where |
 |---|---|
-| R export script (golden source) | `r-scripts/export_cardinal_pngs.R` |
+| PeakMe Import script (Cardinal → PeakMe) | `r-scripts/peakme_import.R` |
+| PeakMe Export script (PeakMe → R) | `r-scripts/peakme_export.R` |
 | Instructions page (TSX) | `frontend/src/pages/InstructionsPage.tsx` |
 | Instructions workflow doc | `docs/r-export-workflow.md` |
 | API routes | `backend/app/routers/` |

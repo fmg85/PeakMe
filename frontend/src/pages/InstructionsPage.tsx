@@ -210,13 +210,13 @@ export default function InstructionsPage() {
         <h1 className="text-xl font-bold text-white">Instructions</h1>
         <div className="ml-auto flex items-center gap-2">
           <button
-            onClick={() => download('export_cardinal_pngs.R')}
+            onClick={() => download('peakme_import.R')}
             className="rounded-lg bg-brand-orange px-4 py-2 text-sm font-medium text-white hover:bg-brand-red transition-colors"
           >
             ↓ PeakMe Import
           </button>
           <button
-            onClick={() => download('peakme_import.R')}
+            onClick={() => download('peakme_export.R')}
             className="rounded-lg bg-brand-purple px-4 py-2 text-sm font-medium text-white hover:opacity-90 transition-opacity"
           >
             ↓ PeakMe Export
@@ -250,7 +250,7 @@ install.packages(c("viridis", "optparse", "png"))`}</CodeBlock>
           <div className="mt-2 rounded-lg border border-brand-purple/40 bg-brand-purple/10 p-4 space-y-2">
             <p className="text-sm font-semibold text-brand-purple">RStudio (Windows or Mac) — recommended</p>
             <ol className="text-sm text-gray-300 space-y-1 list-decimal list-inside">
-              <li>Open <code className="rounded bg-gray-800 px-1 text-green-300">export_cardinal_pngs.R</code> in RStudio</li>
+              <li>Open <code className="rounded bg-gray-800 px-1 text-green-300">peakme_import.R</code> in RStudio</li>
               <li>Edit the config block near the top — two options:</li>
             </ol>
             <p className="text-xs text-gray-400 pl-4">
@@ -276,13 +276,13 @@ msi_file   = "C:/Users/YourName/data/sample.imzML",
           </div>
 
           <h3 className="text-sm font-medium text-gray-300 mt-5">Terminal / command line</h3>
-          <CodeBlock>{`Rscript export_cardinal_pngs.R \\
+          <CodeBlock>{`Rscript peakme_import.R \\
   --file /path/to/data.imzML \\
   --output ./peakme_export \\
   --zip
 
 # or from an RData file:
-Rscript export_cardinal_pngs.R \\
+Rscript peakme_import.R \\
   --file /path/to/experiment.RData \\
   --output ./peakme_export \\
   --zip`}</CodeBlock>
@@ -338,14 +338,14 @@ Rscript export_cardinal_pngs.R \\
 
         <CollapsibleSection title="Step 6 — Run the PeakMe Export Script">
           <p className="text-sm text-gray-400">
-            <code className="rounded bg-gray-800 px-1 text-green-300">peakme_import.R</code> reads the CSV, matches each annotation back to the correct m/z feature in your <code className="rounded bg-gray-800 px-1 text-green-300">MSImagingExperiment</code>, and creates a filtered object ready for downstream analysis.
+            <code className="rounded bg-gray-800 px-1 text-green-300">peakme_export.R</code> reads the CSV, matches each annotation back to the correct m/z feature in your <code className="rounded bg-gray-800 px-1 text-green-300">MSImagingExperiment</code>, and creates a filtered object ready for downstream analysis.
           </p>
 
           <div className="mt-2 rounded-lg border border-brand-purple/40 bg-brand-purple/10 p-4 space-y-2">
             <p className="text-sm font-semibold text-brand-purple">RStudio — recommended</p>
             <ol className="text-sm text-gray-300 space-y-1 list-decimal list-inside">
               <li>Make sure your <code className="rounded bg-gray-800 px-1 text-green-300">MSImagingExperiment</code> is loaded in the session (same object you exported from)</li>
-              <li>Open <code className="rounded bg-gray-800 px-1 text-green-300">peakme_import.R</code> and edit the config block:</li>
+              <li>Open <code className="rounded bg-gray-800 px-1 text-green-300">peakme_export.R</code> and edit the config block:</li>
             </ol>
             <CodeBlock>{`msi_object       = "MSE_process",         # name of your MSE variable
 csv_file         = "peakme_annotations.csv", # path to the downloaded CSV

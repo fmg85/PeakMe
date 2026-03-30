@@ -1,30 +1,40 @@
 #!/usr/bin/env Rscript
 # =============================================================================
-# PeakMe: Annotation Import Script
+# PeakMe: Cardinal MSI → PNG Export Script
 # =============================================================================
-# Attaches PeakMe annotations back to your MSImagingExperiment.
+# Exports each m/z feature in an MSImagingExperiment as a PNG image and writes
+# a metadata.csv manifest. The output folder can be zipped and uploaded to
+# PeakMe for annotation.
 #
-# What this script does:
-#   1. Reads the CSV you exported from PeakMe
-#   2. Matches each annotation to the correct m/z feature in your MSE object
-#   3. Adds annotation columns to fData(): peakme_label, peakme_starred,
-#      peakme_confidence, peakme_annotator
-#   4. Optionally creates MSE_clean — the experiment with unwanted features
-#      (noise, matrix, etc.) removed
+# The script accepts an MSImagingExperiment from any source:
+#   - already loaded in your R session (peak-picked, aligned, filtered, raw…)
+#   - read from an .imzML file
+#   - loaded from a saved .RData / .rda file
 #
 # Dependencies:
+#   install.packages("BiocManager")
 #   BiocManager::install("Cardinal")
+#   install.packages(c("viridis", "optparse", "png"))
 #
 # ── RStudio / interactive use ─────────────────────────────────────────────────
 # 1. Edit the config block below (lines marked EDIT ME)
 # 2. Click Source  (Ctrl+Shift+S on Windows · Cmd+Shift+S on Mac)
 #
 # ── Command-line use ─────────────────────────────────────────────────────────
-#   Rscript peakme_import.R --csv annotations.csv --output MSE_annotated.RData
+#   # From an object name in a running R session — not applicable on CLI
+#   # From a file:
+#   Rscript peakme_import.R --file path/to/data.imzML --output ./peakme_export
+#   Rscript peakme_import.R --file path/to/experiment.RData --output ./peakme_export
+#
+# See docs/r-export-workflow.md for full instructions.
 # =============================================================================
 
 suppressPackageStartupMessages({
   library(Cardinal)
+  library(viridis)
+  library(optparse)
+  library(grDevices)
+  library(png)
 })
 
 # ---------------------------------------------------------------------------
@@ -32,315 +42,367 @@ suppressPackageStartupMessages({
 # (ignored when called from the command line via Rscript)
 # ---------------------------------------------------------------------------
 if (interactive()) {
-  cfg <- list(
-    # ── Your MSImagingExperiment ──────────────────────────────────────────────
-    msi_object = "MSE_process",  # EDIT ME — name of the variable in your session
-                                 # The same object you exported from
+  args <- list(
+    # ── Where is your MSImagingExperiment? Set ONE of the two options below ──
 
-    # ── PeakMe annotation CSV ─────────────────────────────────────────────────
-    csv_file = "peakme_annotations.csv",  # EDIT ME — path to the CSV from PeakMe
+    # Option A: name of a variable already loaded in your R session
+    #   (works for raw read-ins, peak-picked, aligned, filtered — anything)
+    msi_object = "MSE_process",   # EDIT ME — run ls() to see your variable names
+                           #           set to NULL to use Option B instead
 
-    # ── Multi-annotator handling ──────────────────────────────────────────────
-    # If multiple people annotated the same ion, which one wins?
-    # "first"  — keep whichever row appears first in the CSV
-    # "last"   — keep the most recent (by annotated_at column)
-    multi_annotator = "last",
+    # Option B: path to a file to load from (imzML or RData)
+    #   (used only when msi_object is NULL)
+    msi_file   = NULL,    # EDIT ME — e.g. "C:/data/sample.imzML"
+                           #                  "C:/data/experiment.RData"
 
-    # ── Filtering for MSE_clean ───────────────────────────────────────────────
-    # Labels to REMOVE from the clean object (noise, artefacts, etc.)
-    # Set to character(0) to skip filtering and not create MSE_clean.
-    labels_to_remove = c("matrix", "noise"),  # EDIT ME
-
-    # How to handle ions with NO annotation in the CSV:
-    # "keep"   — unannotated ions stay in MSE_clean (label = NA)
-    # "remove" — unannotated ions are dropped from MSE_clean
-    unannotated = "keep"  # EDIT ME
+    # ── Output settings ──────────────────────────────────────────────────────
+    output    = "./peakme_export",  # EDIT ME — folder to write PNGs into
+    width     = 400L,
+    height    = 400L,
+    colormap   = "viridis",  # viridis | magma | plasma | inferno | cividis
+    normalize  = "rms",      # rms | tic | none
+    zip        = TRUE,       # TRUE = create a .zip ready to upload to PeakMe
+    export_tic = TRUE        # TRUE = generate a TIC spectrum PNG per ion image
+                             # (adds ~20-50% to export time; included in the ZIP)
   )
 } else {
   # ---------------------------------------------------------------------------
-  # CLI argument parsing
+  # CLI argument parsing (Rscript / terminal use)
   # ---------------------------------------------------------------------------
-  suppressPackageStartupMessages(library(optparse))
-
   option_list <- list(
-    make_option(c("-c", "--csv"),
+    make_option(c("-f", "--file"),
       type = "character", default = NULL,
-      help = "Path to PeakMe annotations CSV (required)",
+      help = "Path to .imzML or .RData file containing an MSImagingExperiment",
       metavar = "FILE"
     ),
     make_option(c("-o", "--output"),
-      type = "character", default = NULL,
-      help = "Path to save annotated MSE object as .RData (optional)",
-      metavar = "FILE"
+      type = "character", default = "./peakme_export",
+      help = "Output directory for PNGs and metadata.csv [default: ./peakme_export]",
+      metavar = "DIR"
     ),
-    make_option(c("--object"),
-      type = "character", default = "MSE_process",
-      help = "Name of MSImagingExperiment variable in --rdata file [default: MSE_process]"
+    make_option(c("--width"),
+      type = "integer", default = 400,
+      help = "Image width in pixels [default: 400]"
     ),
-    make_option(c("--rdata"),
-      type = "character", default = NULL,
-      help = "Path to .RData file containing the MSImagingExperiment (optional if already loaded)"
+    make_option(c("--height"),
+      type = "integer", default = 400,
+      help = "Image height in pixels [default: 400]"
     ),
-    make_option(c("--remove"),
-      type = "character", default = "matrix,noise",
-      help = "Comma-separated labels to remove for MSE_clean [default: matrix,noise]"
+    make_option(c("--colormap"),
+      type = "character", default = "viridis",
+      help = "Colormap: viridis, magma, plasma, inferno, cividis [default: viridis]"
     ),
-    make_option(c("--unannotated"),
-      type = "character", default = "keep",
-      help = "What to do with unannotated ions in MSE_clean: keep or remove [default: keep]"
+    make_option(c("--normalize"),
+      type = "character", default = "rms",
+      help = "Intensity normalization: tic, rms, none [default: rms]"
     ),
-    make_option(c("--multi-annotator"),
-      type = "character", default = "last",
-      help = "Which annotation wins when multiple annotators: first or last [default: last]"
+    make_option(c("--zip"),
+      action = "store_true", default = FALSE,
+      help = "Zip the output directory after export (produces <output>.zip)"
+    ),
+    make_option("--no-tic",
+      action = "store_true", default = FALSE,
+      help = "Skip TIC spectrum PNG generation (faster export, smaller ZIP)"
     )
   )
 
   parser <- OptionParser(
     usage = "%prog [options]",
     option_list = option_list,
-    description = paste(
-      "Attach PeakMe annotations to an MSImagingExperiment.",
-      "Run from an R session that already has your MSE object loaded, or",
-      "pass --rdata to load it from a file."
-    )
+    description = "Export a Cardinal MSImagingExperiment to PNGs for PeakMe annotation"
   )
   args <- parse_args(parser)
+  args$msi_object <- NULL
+  args$export_tic <- !args[["no-tic"]]
+  args$msi_file   <- args$file
 
-  if (is.null(args$csv)) {
+  if (is.null(args$msi_file)) {
     print_help(parser)
-    stop("--csv is required", call. = FALSE)
+    stop("--file is required", call. = FALSE)
   }
-
-  cfg <- list(
-    msi_object      = args$object,
-    csv_file        = args$csv,
-    multi_annotator = args[["multi-annotator"]],
-    labels_to_remove = if (nchar(args$remove) > 0)
-                         trimws(strsplit(args$remove, ",")[[1]])
-                       else character(0),
-    unannotated     = args$unannotated
-  )
-
-  # Load MSE from file if --rdata was provided
-  if (!is.null(args$rdata)) {
-    message("PeakMe import: loading MSE from ", args$rdata)
-    load(args$rdata, envir = .GlobalEnv)
-  }
-}
-
-# =============================================================================
-# 1. Load the MSImagingExperiment
-# =============================================================================
-if (!exists(cfg$msi_object, envir = .GlobalEnv)) {
-  stop(
-    "Object '", cfg$msi_object, "' not found in your R session.\n",
-    "  - Run ls() to see what's loaded.\n",
-    "  - Update msi_object in the config block.\n",
-    "  - Or use --rdata on the command line to load from a file.",
-    call. = FALSE
-  )
-}
-mse <- get(cfg$msi_object, envir = .GlobalEnv)
-
-if (!is(mse, "MSImagingExperiment")) {
-  stop(
-    "'", cfg$msi_object, "' is a ", class(mse), ", not an MSImagingExperiment.\n",
-    "  Update msi_object to the correct variable name.",
-    call. = FALSE
-  )
-}
-
-n_features <- nrow(mse)
-mz_values  <- mz(mse)
-message("PeakMe import: MSE has ", n_features, " features, ",
-        ncol(mse), " pixels")
-
-# =============================================================================
-# 2. Read the PeakMe CSV
-# =============================================================================
-if (!file.exists(cfg$csv_file)) {
-  stop("CSV not found: ", cfg$csv_file, call. = FALSE)
-}
-ann <- read.csv(cfg$csv_file, stringsAsFactors = FALSE)
-
-required_cols <- c("mz_value", "label_name")
-missing_cols  <- setdiff(required_cols, colnames(ann))
-if (length(missing_cols) > 0) {
-  stop("CSV is missing required columns: ", paste(missing_cols, collapse = ", "),
-       call. = FALSE)
-}
-
-message("PeakMe import: read ", nrow(ann), " annotation rows from ", cfg$csv_file)
-if ("annotated_at" %in% colnames(ann)) {
-  ann$annotated_at <- as.POSIXct(ann$annotated_at, format = "%Y-%m-%dT%H:%M:%S",
-                                 tz = "UTC")
 }
 
 # ---------------------------------------------------------------------------
-# 2a. Handle multiple annotators — collapse to one row per ion
+# Load / locate the MSImagingExperiment
 # ---------------------------------------------------------------------------
-n_annotators <- if ("annotator" %in% colnames(ann)) length(unique(ann$annotator)) else 1L
-
-if (n_annotators > 1L) {
-  message("PeakMe import: ", n_annotators, " annotators found. ",
-          "Using '", cfg$multi_annotator, "' strategy.")
-
-  if (cfg$multi_annotator == "last" && "annotated_at" %in% colnames(ann)) {
-    # Sort descending so the most-recent row is first; then keep first per mz_value
-    ann <- ann[order(ann$mz_value, ann$annotated_at, decreasing = c(FALSE, TRUE),
-                     method = "radix"), ]
+if (!is.null(args$msi_object)) {
+  # ── Option A: object already in the R session ──
+  if (!exists(args$msi_object, envir = .GlobalEnv)) {
+    stop(
+      "Object '", args$msi_object, "' not found in your R session.\n",
+      "  Run ls() to see available variables, or set msi_file to load from a file.",
+      call. = FALSE
+    )
   }
-  # Keep first occurrence of each mz_value (works for both "first" and "last")
-  ann <- ann[!duplicated(ann$mz_value), ]
-  message("PeakMe import: collapsed to ", nrow(ann), " unique ions")
-}
+  msi <- get(args$msi_object, envir = .GlobalEnv)
+  message("PeakMe export: using object '", args$msi_object, "' from R session")
 
-# =============================================================================
-# 3. Match annotations to features by m/z
-# =============================================================================
-# Strategy: exact match first (R double → float8 → CSV → R double is
-# bit-for-bit identical for values that came from the same export). Fall back
-# to nearest-neighbour within 0.001 Da and warn loudly.
+} else if (!is.null(args$msi_file)) {
+  # ── Option B: load from a file ──
+  message("PeakMe export: loading from ", args$msi_file)
+  ext <- tolower(tools::file_ext(args$msi_file))
 
-ann_mz <- ann$mz_value
+  if (ext == "imzml") {
+    msi <- readMSIData(args$msi_file)
 
-# Build index: for each annotation row, which MSE feature index does it map to?
-feat_idx <- integer(nrow(ann))
+  } else if (ext %in% c("rdata", "rda")) {
+    env <- new.env()
+    load(args$msi_file, envir = env)
 
-for (i in seq_along(ann_mz)) {
-  exact <- which(mz_values == ann_mz[i])
-  if (length(exact) == 1L) {
-    feat_idx[i] <- exact
-  } else if (length(exact) > 1L) {
-    warning("m/z ", ann_mz[i], " matches multiple features (", length(exact),
-            " hits). Using the first.", call. = FALSE)
-    feat_idx[i] <- exact[1L]
-  } else {
-    # Nearest-neighbour fallback
-    diffs <- abs(mz_values - ann_mz[i])
-    nn    <- which.min(diffs)
-    if (diffs[nn] <= 0.001) {
-      warning("m/z ", ann_mz[i], " had no exact match; using nearest feature at ",
-              round(mz_values[nn], 6), " (Δ = ", round(diffs[nn] * 1000, 3), " mDa).",
-              call. = FALSE)
-      feat_idx[i] <- nn
-    } else {
-      warning("m/z ", ann_mz[i], " could not be matched (nearest is ",
-              round(mz_values[nn], 6), ", Δ = ", round(diffs[nn], 4), " Da). Skipping.",
-              call. = FALSE)
-      feat_idx[i] <- NA_integer_
+    # Find MSImagingExperiment objects in the file
+    msi_names <- Filter(
+      function(n) inherits(get(n, envir = env), "MSImagingExperiment"),
+      ls(env)
+    )
+    if (length(msi_names) == 0) {
+      stop(
+        "No MSImagingExperiment found in ", args$msi_file, ".\n",
+        "  Objects present: ", paste(ls(env), collapse = ", "),
+        call. = FALSE
+      )
     }
-  }
-}
-
-n_matched   <- sum(!is.na(feat_idx))
-n_unmatched <- sum(is.na(feat_idx))
-
-if (n_unmatched > 0) {
-  warning(n_unmatched, " annotation(s) could not be matched to any feature and will be ignored.",
-          call. = FALSE)
-  ann      <- ann[!is.na(feat_idx), ]
-  feat_idx <- feat_idx[!is.na(feat_idx)]
-}
-
-message("PeakMe import: matched ", n_matched, " / ", nrow(ann) + n_unmatched,
-        " annotations to MSE features")
-
-# =============================================================================
-# 4. Attach annotations to fData()
-# =============================================================================
-fd <- fData(mse)
-
-# Initialise annotation columns with NA
-fd$peakme_label      <- NA_character_
-fd$peakme_starred    <- NA
-fd$peakme_confidence <- NA_integer_
-fd$peakme_annotator  <- NA_character_
-
-fd$peakme_label[feat_idx]   <- ann$label_name
-fd$peakme_starred[feat_idx] <- if ("starred" %in% colnames(ann))
-                                  as.logical(ann$starred)
-                                else NA
-fd$peakme_confidence[feat_idx] <- if ("confidence" %in% colnames(ann))
-                                     suppressWarnings(as.integer(ann$confidence))
-                                   else NA_integer_
-fd$peakme_annotator[feat_idx]  <- if ("annotator" %in% colnames(ann))
-                                     ann$annotator
-                                   else NA_character_
-
-fData(mse) <- fd
-
-# =============================================================================
-# 5. Coverage summary
-# =============================================================================
-n_annotated   <- sum(!is.na(fd$peakme_label))
-n_unannotated <- n_features - n_annotated
-pct           <- round(100 * n_annotated / n_features, 1)
-
-message("")
-message("── Coverage ──────────────────────────────────────────────────────────")
-message("  Total features : ", n_features)
-message("  Annotated      : ", n_annotated, " (", pct, "%)")
-message("  Unannotated    : ", n_unannotated)
-
-label_counts <- sort(table(fd$peakme_label[!is.na(fd$peakme_label)]),
-                     decreasing = TRUE)
-message("")
-message("── Label breakdown ───────────────────────────────────────────────────")
-for (nm in names(label_counts)) {
-  message("  ", formatC(nm, width = 20, flag = "-"), " ", label_counts[[nm]])
-}
-message("")
-
-# Assign updated MSE back to the original variable name in the global env
-assign(cfg$msi_object, mse, envir = .GlobalEnv)
-message("PeakMe import: updated '", cfg$msi_object, "' with annotation columns")
-
-# =============================================================================
-# 6. Create MSE_clean (filtered object)
-# =============================================================================
-if (length(cfg$labels_to_remove) > 0) {
-  labels_lower  <- tolower(cfg$labels_to_remove)
-  remove_mask   <- tolower(fd$peakme_label) %in% labels_lower
-
-  if (cfg$unannotated == "remove") {
-    remove_mask[is.na(fd$peakme_label)] <- TRUE
-  }
-
-  n_removed <- sum(remove_mask)
-  n_kept    <- n_features - n_removed
-
-  if (n_kept == 0) {
-    warning("All features would be removed — MSE_clean was NOT created. ",
-            "Check your labels_to_remove.", call. = FALSE)
-  } else {
-    MSE_clean <- mse[!remove_mask, ]
-    assign("MSE_clean", MSE_clean, envir = .GlobalEnv)
-
-    message("── MSE_clean ──────────────────────────────────────────────────────────")
-    message("  Removed : ", n_removed, " features (labels: ",
-            paste(cfg$labels_to_remove, collapse = ", "), ")")
-    if (cfg$unannotated == "remove") {
-      message("           + unannotated features (--unannotated=remove)")
+    if (length(msi_names) > 1) {
+      message("  Found multiple MSImagingExperiment objects: ", paste(msi_names, collapse = ", "))
+      message("  Using the first: '", msi_names[1], "'")
+      message("  To use a different one, set msi_object = \"", msi_names[2], "\" instead.")
     }
-    message("  Kept    : ", n_kept, " features")
-    message("  Created : MSE_clean in your R session")
-    message("")
+    msi <- get(msi_names[1], envir = env)
+    message("  Loaded: '", msi_names[1], "'")
+
+  } else {
+    stop("Unsupported file type '.", ext, "' — use .imzML or .RData", call. = FALSE)
   }
+
 } else {
-  message("No labels_to_remove specified — MSE_clean was not created.")
-  message("Set labels_to_remove in the config block to filter the experiment.")
-  message("")
+  stop(
+    "Nothing to load.\n",
+    "  In RStudio: set msi_object (variable name) or msi_file (file path) in the config block.\n",
+    "  On CLI: use --file path/to/data.imzML",
+    call. = FALSE
+  )
 }
 
-# =============================================================================
-# 7. Optional: save to file (CLI --output only)
-# =============================================================================
-if (!interactive() && !is.null(args$output)) {
-  save_vars <- cfg$msi_object
-  if (exists("MSE_clean", envir = .GlobalEnv)) save_vars <- c(save_vars, "MSE_clean")
-  save(list = save_vars, file = args$output, envir = .GlobalEnv)
-  message("Saved to ", args$output)
+# Verify we actually have an MSImagingExperiment
+if (!inherits(msi, "MSImagingExperiment")) {
+  stop(
+    "Expected an MSImagingExperiment but got: ", class(msi)[1], ".\n",
+    "  Make sure the object is a Cardinal MSImagingExperiment.",
+    call. = FALSE
+  )
 }
 
-message("PeakMe import: done.")
+message("  Dimensions: ", ncol(msi), " pixels · ", length(mz(msi)), " m/z features")
+
+# ---------------------------------------------------------------------------
+# Normalization
+# ---------------------------------------------------------------------------
+if (args$normalize != "none") {
+  message("  Normalizing: ", args$normalize)
+  msi <- normalize(msi, method = args$normalize)
+}
+
+# ---------------------------------------------------------------------------
+# Colormap setup
+# ---------------------------------------------------------------------------
+cmap_fn <- switch(args$colormap,
+  "viridis"  = viridis,
+  "magma"    = magma,
+  "plasma"   = plasma,
+  "inferno"  = inferno,
+  "cividis"  = cividis,
+  stop("Unknown colormap: ", args$colormap, call. = FALSE)
+)
+colors <- cmap_fn(256)
+
+# ---------------------------------------------------------------------------
+# Create output directory (clean previous PNGs/CSVs if re-running)
+# ---------------------------------------------------------------------------
+if (dir.exists(args$output)) {
+  old_files <- list.files(args$output, pattern = "\\.png$|\\.csv$", full.names = TRUE)
+  if (length(old_files) > 0) {
+    message("  Cleaning ", length(old_files), " files from previous run in ", args$output, "/")
+    file.remove(old_files)
+  }
+}
+dir.create(args$output, recursive = TRUE, showWarnings = FALSE)
+
+# ---------------------------------------------------------------------------
+# Export each m/z feature as a PNG
+# ---------------------------------------------------------------------------
+mz_values  <- mz(msi)
+n_features <- length(mz_values)
+
+message("  Exporting ", n_features, " ion images to ", args$output, "/")
+
+# ── Pre-compute pixel → matrix index mapping ONCE ────────────────────────────
+coords  <- coord(msi)
+x_vals  <- coords$x
+y_vals  <- coords$y
+x_min   <- min(x_vals); y_min <- min(y_vals)
+n_rows  <- max(y_vals) - y_min + 1L
+n_cols  <- max(x_vals) - x_min + 1L
+xi_idx  <- x_vals - x_min + 1L
+yi_idx  <- y_vals - y_min + 1L
+mat_idx <- cbind(yi_idx, xi_idx)
+
+# ── Materialise all intensities up-front if memory allows ────────────────────
+# Cardinal may store iData() as a memory-mapped matter_mat; row-by-row access
+# re-reads disk and re-applies any lazy normalisation for every feature.
+# Estimate bytes assuming float32 (Cardinal's default storage type).
+bytes_per_val <- if (is.double(iData(msi)[1L, 1L])) 8 else 4
+gb_needed <- (n_features * ncol(msi) * bytes_per_val) / 1e9
+message(sprintf("  Intensity matrix: ~%.1f GB needed", gb_needed))
+if (gb_needed < 8) {
+  message("  Materialising intensity matrix (this may take a moment)…")
+  int_mat <- as.matrix(iData(msi))   # features × pixels, plain R matrix
+  get_row <- function(i) int_mat[i, ]
+} else {
+  message("  Dataset too large to materialise; reading row-by-row.")
+  get_row <- function(i) as.numeric(iData(msi)[i, ])
+}
+
+# ── Pre-compute colormap as float RGB (256 × 3) for direct pixel writes ──────
+colors_rgb <- t(col2rgb(colors)) / 255   # 256 × 3, values in [0, 1]
+
+# ── Pre-compute mean spectrum for TIC plots (once, reused per ion) ────────────
+if (args$export_tic) {
+  if (exists("int_mat")) {
+    message("  Pre-computing mean spectrum for TIC plots…")
+    mean_spec <- rowMeans(int_mat, na.rm = TRUE)
+  } else {
+    message("  Note: TIC spectrum export skipped — dataset too large to materialise.")
+    args$export_tic <- FALSE
+  }
+}
+
+# ── TIC spectrum renderer ─────────────────────────────────────────────────────
+# Renders the mean mass spectrum in a ±2 Da window around the target m/z as a
+# raw pixel array (same writePNG approach as ion images — no graphics device).
+render_tic_png <- function(feat_idx, mz_values, mean_spec, w, h) {
+  target_mz <- mz_values[feat_idx]
+  lo   <- target_mz - 2; hi <- target_mz + 2
+  mask <- mz_values >= lo & mz_values <= hi
+  mz_w  <- mz_values[mask]
+  int_w <- mean_spec[mask]
+
+  # Dark theme matching the PeakMe UI
+  bg  <- c(0.059, 0.090, 0.165)  # #0f172a  (background)
+  lc  <- c(0.655, 0.545, 0.980)  # #a78bfa  (spectrum bar, purple)
+  mkr <- c(0.976, 0.451, 0.086)  # #f97316  (target m/z marker, orange)
+
+  r_ch <- matrix(bg[1L], nrow = h, ncol = w)
+  g_ch <- matrix(bg[2L], nrow = h, ncol = w)
+  b_ch <- matrix(bg[3L], nrow = h, ncol = w)
+
+  if (length(mz_w) >= 2L) {
+    pad    <- max(1L, as.integer(w * 0.04))
+    pw     <- w - 2L * pad
+    pt     <- max(1L, as.integer(h * 0.06))   # top margin (px)
+    ph     <- h - pt - max(1L, as.integer(h * 0.12))  # usable height (px)
+
+    mz_rng  <- range(mz_w)
+    int_max <- max(int_w, na.rm = TRUE)
+    if (is.na(int_max) || int_max <= 0) int_max <- 1
+
+    cx    <- pad + pmax(1L, pmin(pw, as.integer(
+                (mz_w - mz_rng[1L]) / (mz_rng[2L] - mz_rng[1L]) * (pw - 1L)) + 1L))
+    int_n <- pmax(0, pmin(1, int_w / int_max))
+    top_r <- pt + pmax(0L, as.integer((1 - int_n) * (ph - 1L)))
+    bot_r <- pt + ph - 1L
+
+    for (j in seq_along(mz_w)) {
+      rows <- top_r[j]:bot_r
+      r_ch[rows, cx[j]] <- lc[1L]
+      g_ch[rows, cx[j]] <- lc[2L]
+      b_ch[rows, cx[j]] <- lc[3L]
+    }
+
+    # Orange marker at the target m/z
+    if (target_mz >= mz_rng[1L] && target_mz <= mz_rng[2L]) {
+      mx <- pad + pmax(1L, pmin(pw, as.integer(
+              (target_mz - mz_rng[1L]) / (mz_rng[2L] - mz_rng[1L]) * (pw - 1L)) + 1L))
+      r_ch[pt:bot_r, mx] <- mkr[1L]
+      g_ch[pt:bot_r, mx] <- mkr[2L]
+      b_ch[pt:bot_r, mx] <- mkr[3L]
+    }
+  }
+
+  array(c(r_ch, g_ch, b_ch), dim = c(h, w, 3L))
+}
+
+metadata_rows <- vector("list", n_features)
+t_start <- proc.time()[["elapsed"]]
+
+for (i in seq_along(mz_values)) {
+  mz_val   <- mz_values[i]
+  fname    <- sprintf("%.4f.png", mz_val)
+  fpath    <- file.path(args$output, fname)
+
+  img_data <- get_row(i)
+
+  # Vectorised fill
+  mat <- matrix(NA_real_, nrow = n_rows, ncol = n_cols)
+  mat[mat_idx] <- img_data
+
+  # Normalise to [0, 1]
+  mat_min <- min(mat, na.rm = TRUE)
+  mat_max <- max(mat, na.rm = TRUE)
+  if (mat_max > mat_min) {
+    mat_norm <- (mat - mat_min) / (mat_max - mat_min)
+  } else {
+    mat_norm <- matrix(0.0, nrow = n_rows, ncol = n_cols)
+  }
+
+  # Map each pixel to a colormap index (1..256), NA → black (index 1)
+  cidx <- pmax(1L, pmin(256L, as.integer(mat_norm * 255.0) + 1L))
+  cidx[is.na(cidx)] <- 1L
+
+  # Build height × width × 3 float array and write PNG directly
+  # (avoids opening/closing an R graphics device for every feature)
+  img_arr <- array(
+    c(colors_rgb[cidx, 1L], colors_rgb[cidx, 2L], colors_rgb[cidx, 3L]),
+    dim = c(n_rows, n_cols, 3L)
+  )
+  writePNG(img_arr, fpath)
+
+  # TIC spectrum PNG (same name with _tic suffix, landscape aspect ratio)
+  if (args$export_tic) {
+    tic_h   <- max(100L, args$width %/% 2L)   # e.g. 400 wide → 200 tall
+    tic_arr <- render_tic_png(i, mz_values, mean_spec, args$width, tic_h)
+    writePNG(tic_arr, file.path(args$output, sprintf("%.4f_tic.png", mz_val)))
+  }
+
+  metadata_rows[[i]] <- data.frame(filename = fname, mz_value = mz_val,
+                                   stringsAsFactors = FALSE)
+
+  if (i %% 100L == 0L || i == n_features) {
+    elapsed  <- proc.time()[["elapsed"]] - t_start
+    rate     <- i / elapsed
+    eta_min  <- (n_features - i) / rate / 60
+    message(sprintf("  Progress: %d / %d (%.0f%%) — %.1f img/s — ETA %.0f min",
+                    i, n_features, 100 * i / n_features, rate, eta_min))
+  }
+}
+
+# ---------------------------------------------------------------------------
+# Write metadata.csv
+# ---------------------------------------------------------------------------
+metadata      <- do.call(rbind, metadata_rows)
+metadata_path <- file.path(args$output, "metadata.csv")
+write.csv(metadata, metadata_path, row.names = FALSE)
+message("  Wrote metadata.csv (", nrow(metadata), " ions)")
+
+# ---------------------------------------------------------------------------
+# Optional zip
+# ---------------------------------------------------------------------------
+if (args$zip) {
+  zip_path <- paste0(args$output, ".zip")
+  message("  Creating zip: ", zip_path)
+  zip(zip_path, files = args$output, flags = "-r9q")
+  message("  Done. Upload '", basename(zip_path), "' to PeakMe.")
+} else {
+  message("  Done. Zip the '", basename(args$output), "/' folder and upload to PeakMe.")
+  message("  Quick zip command:")
+  message("    cd ", dirname(normalizePath(args$output)),
+          " && zip -r ", basename(args$output), ".zip ", basename(args$output), "/")
+}

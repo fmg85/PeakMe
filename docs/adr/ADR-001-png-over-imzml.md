@@ -9,7 +9,7 @@ MSI datasets are produced by mass spectrometers and stored in the imzML format â
 
 ## Decision
 
-Accept **pre-rendered PNG images** as the upload format rather than raw imzML files. Scientists run a provided R script (`r-scripts/export_cardinal_pngs.R`) on their local machine using the Cardinal MSI package, which exports one PNG per m/z value together with a `metadata.csv`. They then zip and upload the folder to PeakMe.
+Accept **pre-rendered PNG images** as the upload format rather than raw imzML files. Scientists run a provided R script (`r-scripts/peakme_import.R`) on their local machine using the Cardinal MSI package, which exports one PNG per m/z value together with a `metadata.csv`. They then zip and upload the folder to PeakMe.
 
 ## Consequences
 
