@@ -218,7 +218,7 @@ export default function InstructionsPage() {
             >
               ↓ PeakMe Import
             </button>
-            <span className="text-xs text-gray-500">v1.4.1</span>
+            <span className="text-xs text-gray-500">v1.4.2</span>
           </div>
           <div className="flex flex-col items-end gap-1">
             <button

@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 # =============================================================================
-# PeakMe: Cardinal MSI → PNG Export Script  [version 1.4.1 · 2026-03-30]
+# PeakMe: Cardinal MSI → PNG Export Script  [version 1.4.2 · 2026-03-30]
 # =============================================================================
 # Exports each m/z feature in an MSImagingExperiment as a PNG image and writes
 # a metadata.csv manifest. The output folder can be zipped and uploaded to
@@ -341,25 +341,28 @@ render_tic_png <- function(feat_idx, mz_values, mean_spec, out_path, w, h,
   graphics::title(xlab = "m/z",               col.lab = col_txt, cex.lab = 1.70, line = 3.8)
   graphics::title(ylab = "Total Ion Intensity", col.lab = col_txt, cex.lab = 1.70, line = 5.0)
 
-  # Orange marker exactly as tall as the target ion, labelled with its m/z
+  # Orange marker exactly as tall as the target ion (no separate small label — handled below)
   t_int <- if (!is.na(target_int) && target_int > 0) target_int else int_max * 0.05
   graphics::segments(x0 = target_mz, y0 = 0, x1 = target_mz, y1 = t_int,
                      col = col_mkr, lwd = 2.5, lty = 1)
-  mkr_ch_h <- graphics::strheight("0", cex = 1.44)
-  graphics::text(x = target_mz, y = t_int + mkr_ch_h * 0.3,
-                 labels = sprintf("%.4f", target_mz),
-                 col = col_mkr, cex = 1.44, adj = c(0.5, 0))
 
   # ── Peak labels with guide lines ─────────────────────────────────────────
+  # Ensure the target m/z is always included among the labelled peaks
   lbl_cex <- 1.80
   n_top   <- min(n_label, length(mz_w))
   top_idx <- order(int_w, decreasing = TRUE)[seq_len(n_top)]
+  # Add target peak index if not already in the top-N
+  target_w_idx <- which.min(abs(mz_w - target_mz))
+  if (!target_w_idx %in% top_idx) top_idx <- c(top_idx[-length(top_idx)], target_w_idx)
 
   lbl_mz  <- mz_w[top_idx]
   lbl_int <- int_w[top_idx]
   lbl_txt <- sprintf("%.4f", lbl_mz)
   srt     <- order(lbl_mz)
   lbl_mz  <- lbl_mz[srt]; lbl_int <- lbl_int[srt]; lbl_txt <- lbl_txt[srt]
+
+  # Which label is the target ion?
+  is_target <- abs(lbl_mz - target_mz) == min(abs(lbl_mz - target_mz))
 
   ch_w <- graphics::strwidth("0.0000",  cex = lbl_cex)
   ch_h <- graphics::strheight("0.0000", cex = lbl_cex)
@@ -398,14 +401,16 @@ render_tic_png <- function(feat_idx, mz_values, mean_spec, out_path, w, h,
     }
   }
 
-  # Guide lines: from peak tip to just below each label (always drawn, always visible)
+  # Guide lines + labels: target peak in orange, others in default colours
   for (j in seq_along(px)) {
+    line_col <- if (is_target[j]) col_mkr else col_lead
+    text_col <- if (is_target[j]) col_mkr else col_lbl
     graphics::segments(x0 = lbl_mz[j], y0 = lbl_int[j],
                        x1 = px[j],     y1 = py[j] - ch_h * 0.6,
-                       col = col_lead, lwd = 2.0, lty = 2)
+                       col = line_col, lwd = 2.0, lty = 2)
+    graphics::text(px[j], py[j], labels = lbl_txt[j],
+                   col = text_col, cex = lbl_cex, adj = c(0.5, 0.5))
   }
-
-  graphics::text(px, py, labels = lbl_txt, col = col_lbl, cex = lbl_cex, adj = c(0.5, 0.5))
 
   invisible(NULL)
 }
