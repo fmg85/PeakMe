@@ -37,8 +37,8 @@ function OptionTable() {
   const rows = [
     ['--file', '(required)', 'Path to .imzML or .RData file'],
     ['--output', './peakme_export', 'Output directory'],
-    ['--width', '400', 'Image width in pixels'],
-    ['--height', '400', 'Image height in pixels'],
+    ['--width', '720', 'Image width in pixels'],
+    ['--height', '720', 'Image height in pixels'],
     ['--colormap', 'viridis', 'Color scale: viridis, magma, plasma, inferno, cividis'],
     ['--normalize', 'rms', 'Normalization: tic, rms, none'],
     ['--zip', 'off', 'Automatically zip the output folder'],
@@ -379,7 +379,7 @@ MSE_clean   # use this for downstream analysis, dimensionality reduction, etc.`}
             </li>
             <li className="flex gap-2">
               <span className="text-brand-orange flex-shrink-0">•</span>
-              <span><strong className="text-white">Image resolution:</strong> 400×400 px is recommended. Larger images (e.g. 800×800) improve zoom quality but increase upload time.</span>
+              <span><strong className="text-white">Image resolution:</strong> 720×720 px is the default and a good balance. Larger images (e.g. 1024×1024) improve detail but increase upload time.</span>
             </li>
             <li className="flex gap-2">
               <span className="text-brand-orange flex-shrink-0">•</span>

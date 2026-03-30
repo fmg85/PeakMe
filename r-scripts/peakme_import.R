@@ -57,8 +57,8 @@ if (interactive()) {
 
     # ── Output settings ──────────────────────────────────────────────────────
     output    = "./peakme_export",  # EDIT ME — folder to write PNGs into
-    width     = 400L,
-    height    = 400L,
+    width     = 720L,
+    height    = 720L,
     colormap   = "viridis",  # viridis | magma | plasma | inferno | cividis
     normalize  = "rms",      # rms | tic | none
     zip        = TRUE,       # TRUE = create a .zip ready to upload to PeakMe

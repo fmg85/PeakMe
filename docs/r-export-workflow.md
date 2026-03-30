@@ -73,6 +73,8 @@ Rscript peakme_import.R \
 |---|---|---|
 | `--file` | *(required)* | Path to `.imzML` or `.RData` file |
 | `--output` | `./peakme_export` | Output directory |
+| `--width` | `720` | Image width in pixels |
+| `--height` | `720` | Image height in pixels |
 | `--colormap` | `viridis` | Color scale: `viridis`, `magma`, `plasma`, `inferno`, `cividis` |
 | `--normalize` | `rms` | Normalization: `tic`, `rms`, `none` |
 | `--zip` | off | Automatically zip the output folder |
