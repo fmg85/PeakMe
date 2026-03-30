@@ -30,6 +30,16 @@ If you notice you have made the **same documentation or process mistake more tha
 a CHANGELOG entry, forgot to update `docs/setup.md` after an auth change), **add a
 specific new rule to this file in the same commit** so it doesn't recur.
 
+## R script authoring rules
+
+- **Never use backslash escapes (`\"`, `\n`, `\t`) inside R string literals** in the R scripts.
+  Vercel/Vite converts every `\` to `/` when serving `.R` files from `public/`, causing parse errors.
+  Use single-quoted alternatives or restructure the string:
+  - Instead of `\"value\"` → use `'value'`
+  - Instead of `"\n"` for a newline in an error → just use `. ` (a space) or split into multiple `message()` calls
+- **Bump the version comment** on line 3 of each R script (`[version X.Y.Z · YYYY-MM-DD]`)
+  and the matching version badge in `InstructionsPage.tsx` whenever the script changes.
+
 ## Documentation maintenance — MANDATORY
 
 After every non-trivial change, ask yourself:

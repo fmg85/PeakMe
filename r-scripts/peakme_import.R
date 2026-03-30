@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 # =============================================================================
-# PeakMe: Cardinal MSI → PNG Export Script  [version 1.3.0 · 2026-03-30]
+# PeakMe: Cardinal MSI → PNG Export Script  [version 1.3.1 · 2026-03-30]
 # =============================================================================
 # Exports each m/z feature in an MSImagingExperiment as a PNG image and writes
 # a metadata.csv manifest. The output folder can be zipped and uploaded to
@@ -141,7 +141,7 @@ if (!is.null(args$msi_object)) {
   # ── Option A: object already in the R session ──
   if (!exists(args$msi_object, envir = .GlobalEnv)) {
     stop(
-      "Object '", args$msi_object, "' not found in your R session.\n",
+      "Object '", args$msi_object, "' not found in your R session. ",
       "  Run ls() to see available variables, or set msi_file to load from a file.",
       call. = FALSE
     )
@@ -168,7 +168,7 @@ if (!is.null(args$msi_object)) {
     )
     if (length(msi_names) == 0) {
       stop(
-        "No MSImagingExperiment found in ", args$msi_file, ".\n",
+        "No MSImagingExperiment found in ", args$msi_file, ". ",
         "  Objects present: ", paste(ls(env), collapse = ", "),
         call. = FALSE
       )
@@ -176,7 +176,7 @@ if (!is.null(args$msi_object)) {
     if (length(msi_names) > 1) {
       message("  Found multiple MSImagingExperiment objects: ", paste(msi_names, collapse = ", "))
       message("  Using the first: '", msi_names[1], "'")
-      message("  To use a different one, set msi_object = \"", msi_names[2], "\" instead.")
+      message("  To use a different one, set msi_object = '", msi_names[2], "' instead.")
     }
     msi <- get(msi_names[1], envir = env)
     message("  Loaded: '", msi_names[1], "'")
@@ -187,8 +187,8 @@ if (!is.null(args$msi_object)) {
 
 } else {
   stop(
-    "Nothing to load.\n",
-    "  In RStudio: set msi_object (variable name) or msi_file (file path) in the config block.\n",
+    "Nothing to load. ",
+    "In RStudio: set msi_object (variable name) or msi_file (file path) in the config block. ",
     "  On CLI: use --file path/to/data.imzML",
     call. = FALSE
   )
