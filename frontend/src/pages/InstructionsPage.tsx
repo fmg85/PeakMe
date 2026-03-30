@@ -36,7 +36,7 @@ function CollapsibleSection({
 function OptionTable() {
   const rows = [
     ['--file', '(required)', 'Path to .imzML or .RData file'],
-    ['--output', './peakme_export', 'Output directory'],
+    ['--output', './peakme_upload', 'Output directory'],
     ['--width', '720', 'Image width in pixels'],
     ['--height', '720', 'Image height in pixels'],
     ['--colormap', 'viridis', 'Color scale: viridis, magma, plasma, inferno, cividis'],
@@ -280,13 +280,13 @@ msi_file   = "C:/Users/YourName/data/sample.imzML",
           <h3 className="text-sm font-medium text-gray-300 mt-5">Terminal / command line</h3>
           <CodeBlock>{`Rscript peakme_import.R \\
   --file /path/to/data.imzML \\
-  --output ./peakme_export \\
+  --output ./peakme_upload \\
   --zip
 
 # or from an RData file:
 Rscript peakme_import.R \\
   --file /path/to/experiment.RData \\
-  --output ./peakme_export \\
+  --output ./peakme_upload \\
   --zip`}</CodeBlock>
 
           <h3 className="text-sm font-medium text-gray-300 mt-2">All options:</h3>
@@ -295,7 +295,7 @@ Rscript peakme_import.R \\
 
         <CollapsibleSection title="Step 3 — Output Format">
           <p className="text-sm text-gray-400">The script produces:</p>
-          <CodeBlock>{`peakme_export/
+          <CodeBlock>{`peakme_upload/
   metadata.csv          ← required by PeakMe
   798.5432.png          ← one PNG per m/z feature
   799.1201.png
@@ -310,10 +310,10 @@ Rscript peakme_import.R \\
 
         <CollapsibleSection title="Step 4 — Upload to PeakMe">
           <ol className="space-y-2 text-sm text-gray-300 list-decimal list-inside">
-            <li>If you used <code className="rounded bg-gray-800 px-1 text-green-300">--zip</code>, a <code className="rounded bg-gray-800 px-1 text-green-300">peakme_export.zip</code> was created automatically.</li>
+            <li>If you used <code className="rounded bg-gray-800 px-1 text-green-300">--zip</code>, a <code className="rounded bg-gray-800 px-1 text-green-300">peakme_upload.zip</code> was created automatically.</li>
             <li>
               If not, zip manually:
-              <CodeBlock>{'zip -r peakme_export.zip peakme_export/'}</CodeBlock>
+              <CodeBlock>{'zip -r peakme_upload.zip peakme_upload/'}</CodeBlock>
             </li>
             <li>Go to your PeakMe project → <strong className="text-white">Upload dataset (ZIP)</strong> → upload the ZIP.</li>
           </ol>

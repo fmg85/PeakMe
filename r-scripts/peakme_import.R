@@ -23,8 +23,8 @@
 # ── Command-line use ─────────────────────────────────────────────────────────
 #   # From an object name in a running R session — not applicable on CLI
 #   # From a file:
-#   Rscript peakme_import.R --file path/to/data.imzML --output ./peakme_export
-#   Rscript peakme_import.R --file path/to/experiment.RData --output ./peakme_export
+#   Rscript peakme_import.R --file path/to/data.imzML --output ./peakme_upload
+#   Rscript peakme_import.R --file path/to/experiment.RData --output ./peakme_upload
 #
 # See docs/r-export-workflow.md for full instructions.
 # =============================================================================
@@ -56,7 +56,7 @@ if (interactive()) {
                            #                  "C:/data/experiment.RData"
 
     # ── Output settings ──────────────────────────────────────────────────────
-    output    = "./peakme_export",  # EDIT ME — folder to write PNGs into
+    output    = "./peakme_upload",  # EDIT ME — folder to write PNGs into
     width     = 720L,
     height    = 720L,
     colormap   = "viridis",  # viridis | magma | plasma | inferno | cividis
@@ -78,8 +78,8 @@ if (interactive()) {
       metavar = "FILE"
     ),
     make_option(c("-o", "--output"),
-      type = "character", default = "./peakme_export",
-      help = "Output directory for PNGs and metadata.csv [default: ./peakme_export]",
+      type = "character", default = "./peakme_upload",
+      help = "Output directory for PNGs and metadata.csv [default: ./peakme_upload]",
       metavar = "DIR"
     ),
     make_option(c("--width"),

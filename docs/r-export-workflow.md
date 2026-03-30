@@ -46,7 +46,7 @@ If your MSImagingExperiment is already loaded in your R session:
 2. Edit the config block near the top:
    ```r
    msi_object = "mse_process"     # name of your variable — run ls() to check
-   output     = "./peakme_export"
+   output     = "./peakme_upload"
    ```
 3. Click **Source** (Ctrl+Shift+S on Windows · Cmd+Shift+S on Mac)
 
@@ -56,14 +56,14 @@ If your MSImagingExperiment is already loaded in your R session:
 # From an imzML file
 Rscript peakme_import.R \
   --file /path/to/your/data.imzML \
-  --output ./peakme_export \
+  --output ./peakme_upload \
   --normalize rms \
   --zip
 
 # From a saved .RData / .rda file
 Rscript peakme_import.R \
   --file my_experiment.RData \
-  --output ./peakme_export \
+  --output ./peakme_upload \
   --zip
 ```
 
@@ -72,7 +72,7 @@ Rscript peakme_import.R \
 | Option | Default | Description |
 |---|---|---|
 | `--file` | *(required)* | Path to `.imzML` or `.RData` file |
-| `--output` | `./peakme_export` | Output directory |
+| `--output` | `./peakme_upload` | Output directory |
 | `--width` | `720` | Image width in pixels |
 | `--height` | `720` | Image height in pixels |
 | `--colormap` | `viridis` | Color scale: `viridis`, `magma`, `plasma`, `inferno`, `cividis` |
@@ -86,7 +86,7 @@ Rscript peakme_import.R \
 The script produces:
 
 ```
-peakme_export/
+peakme_upload/
   metadata.csv          ← required by PeakMe
   798.5432.png          ← one PNG per m/z feature
   799.1201.png
@@ -105,14 +105,14 @@ filename,mz_value
 
 ### 4. Upload to PeakMe
 
-1. If you used `--zip`, a `peakme_export.zip` file was created automatically.
+1. If you used `--zip`, a `peakme_upload.zip` file was created automatically.
 2. If not, zip manually:
    ```bash
    # macOS / Linux
-   zip -r peakme_export.zip peakme_export/
+   zip -r peakme_upload.zip peakme_upload/
 
    # Windows (PowerShell)
-   Compress-Archive peakme_export peakme_export.zip
+   Compress-Archive peakme_upload peakme_upload.zip
    ```
 3. Go to your PeakMe project → **New Dataset** → upload the ZIP file.
 
