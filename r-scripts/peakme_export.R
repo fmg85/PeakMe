@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 # =============================================================================
-# PeakMe: Annotation Import Script
+# PeakMe: Annotation Import Script  [version 1.1.0 · 2026-03-30]
 # =============================================================================
 # Attaches PeakMe annotations back to your MSImagingExperiment.
 #

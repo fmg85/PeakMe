@@ -29,5 +29,7 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
-frontend/public/export_cardinal_pngs.R
+# R scripts and CHANGELOG in public/ are build artifacts (copied from r-scripts/ at build time)
+frontend/public/*.R
+frontend/public/CHANGELOG.md
 .mcp.json

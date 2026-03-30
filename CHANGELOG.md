@@ -7,7 +7,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## Unreleased
 
-- fix: rename default output folder from `peakme_export` → `peakme_upload` in R script, docs, and instructions page (clearer naming — "upload" matches the next step of uploading to PeakMe)
+- fix: rename default output folder from `peakme_export` → `peakme_upload`
+- feat: R script version numbers displayed on instructions page next to each download button (v1.3.0 / v1.1.0); version comment in script header so downloaded files are self-identifying in R script, docs, and instructions page (clearer naming — "upload" matches the next step of uploading to PeakMe)
 - feat: reference layers — tap the ion image card to cycle through: Ion image → TIC spectrum → Fluorescence → Ion + outline → repeat; only layers with data available are shown
 - feat: TIC spectrum PNGs auto-generated per ion by the export script (±2 Da window around peak, dark theme, included in ZIP); disable with `export_tic = FALSE` or `--no-tic` on CLI
 - feat: fluorescence image + outline upload per dataset (project page → "Reference images" expand)

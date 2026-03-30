@@ -211,18 +211,24 @@ export default function InstructionsPage() {
         </Link>
         <h1 className="text-xl font-bold text-white">Instructions</h1>
         <div className="ml-auto flex items-center gap-2">
-          <button
-            onClick={() => download('peakme_import.R')}
-            className="rounded-lg bg-brand-orange px-4 py-2 text-sm font-medium text-white hover:bg-brand-red transition-colors"
-          >
-            ↓ PeakMe Import
-          </button>
-          <button
-            onClick={() => download('peakme_export.R')}
-            className="rounded-lg bg-brand-purple px-4 py-2 text-sm font-medium text-white hover:opacity-90 transition-opacity"
-          >
-            ↓ PeakMe Export
-          </button>
+          <div className="flex flex-col items-end gap-1">
+            <button
+              onClick={() => download('peakme_import.R')}
+              className="rounded-lg bg-brand-orange px-4 py-2 text-sm font-medium text-white hover:bg-brand-red transition-colors"
+            >
+              ↓ PeakMe Import
+            </button>
+            <span className="text-xs text-gray-500">v1.3.0</span>
+          </div>
+          <div className="flex flex-col items-end gap-1">
+            <button
+              onClick={() => download('peakme_export.R')}
+              className="rounded-lg bg-brand-purple px-4 py-2 text-sm font-medium text-white hover:opacity-90 transition-opacity"
+            >
+              ↓ PeakMe Export
+            </button>
+            <span className="text-xs text-gray-500">v1.1.0</span>
+          </div>
         </div>
       </header>
 
