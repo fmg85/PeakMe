@@ -489,7 +489,7 @@ export default function AnnotatePage() {
                   <img
                     src={current.image_url}
                     alt={`Ion m/z ${current.mz_value}`}
-                    className="w-full h-full block"
+                    className="w-full h-full block object-contain"
                     style={{ imageRendering: 'pixelated' }}
                     draggable={false}
                   />
