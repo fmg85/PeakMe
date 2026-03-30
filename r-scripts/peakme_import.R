@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 # =============================================================================
-# PeakMe: Cardinal MSI → PNG Export Script  [version 1.3.6 · 2026-03-30]
+# PeakMe: Cardinal MSI → PNG Export Script  [version 1.3.7 · 2026-03-30]
 # =============================================================================
 # Exports each m/z feature in an MSImagingExperiment as a PNG image and writes
 # a metadata.csv manifest. The output folder can be zipped and uploaded to
@@ -402,17 +402,14 @@ render_tic_png <- function(feat_idx, mz_values, mean_spec, out_path, w, h,
   }
   py <- pmin(py, y_top - ch_h * 0.6)
 
-  # Dotted angled leader lines — only drawn when label has visibly moved from peak tip
+  # Dotted angled leader lines — drawn for every peak label
   col_lead <- adjustcolor(col_txt, alpha.f = 0.5)
   for (j in seq_along(px)) {
     lbl_bot <- py[j] - ch_h * 0.5
     tip_y   <- lbl_int[j]
-    displaced <- lbl_bot > tip_y + v_gap * 1.5 || abs(px[j] - lbl_mz[j]) > ch_w * 0.15
-    if (displaced) {
-      graphics::segments(x0 = lbl_mz[j], y0 = tip_y,
-                         x1 = px[j],     y1 = lbl_bot,
-                         col = col_lead, lwd = 0.7, lty = 3)
-    }
+    graphics::segments(x0 = lbl_mz[j], y0 = tip_y,
+                       x1 = px[j],     y1 = lbl_bot - v_gap * 0.3,
+                       col = col_lead, lwd = 0.7, lty = 3)
   }
 
   graphics::text(px, py, labels = lbl_txt, col = col_lbl,
