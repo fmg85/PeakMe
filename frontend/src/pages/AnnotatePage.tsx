@@ -127,8 +127,10 @@ export default function AnnotatePage() {
   }, [undoStack, prependItem])
 
   // Swipe gesture
+  const isDraggingRef = useRef(false)
   const bind = useDrag(({ down, movement: [mx, my], velocity: [vx, vy] }) => {
     if (!current) return
+    isDraggingRef.current = down && (Math.abs(mx) > 8 || Math.abs(my) > 8)
 
     if (down) {
       setDragXY([mx, my])
@@ -143,6 +145,34 @@ export default function AnnotatePage() {
       }
     }
   }, { filterTaps: true, pointer: { touch: true } })
+
+  // Hold-to-peek TIC spectrum: native pointer events avoid conflict with useDrag's bind()
+  const [showTicOverride, setShowTicOverride] = useState(false)
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const cardRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    const el = cardRef.current
+    if (!el || !current?.tic_image_url) return
+    const onDown = () => {
+      holdTimerRef.current = setTimeout(() => {
+        if (!isDraggingRef.current) setShowTicOverride(true)
+      }, 180)
+    }
+    const onUp = () => {
+      if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null }
+      setShowTicOverride(false)
+    }
+    el.addEventListener('pointerdown', onDown)
+    el.addEventListener('pointerup', onUp)
+    el.addEventListener('pointercancel', onUp)
+    return () => {
+      el.removeEventListener('pointerdown', onDown)
+      el.removeEventListener('pointerup', onUp)
+      el.removeEventListener('pointercancel', onUp)
+      if (holdTimerRef.current) clearTimeout(holdTimerRef.current)
+    }
+  }, [current?.id, current?.tic_image_url])
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -167,17 +197,19 @@ export default function AnnotatePage() {
     : sessionAnnotations
   const remaining_unannotated = Math.max(0, total - baselineAnnotations - (strategy === 'unannotated_first' ? sessionAnnotations : 0))
 
-  // Layer cycling: ion → TIC → fluorescence → fluor+outline → ion+outline → repeat
+  // Layer cycling: ion → fluorescence → fluor+outline → ion+outline → repeat
+  // TIC is shown separately via hold gesture (not part of the tap cycle)
   const availableLayers = useMemo((): Layer[] => {
     const layers: Layer[] = ['ion']
-    if (current?.tic_image_url) layers.push('tic')
     if (dataset?.fluorescence_url) layers.push('fluorescence')
     if (dataset?.fluorescence_url && dataset?.fluorescence_outline_url) layers.push('fluor_overlay')
     if (dataset?.fluorescence_outline_url) layers.push('overlay')
     return layers
-  }, [current?.tic_image_url, dataset?.fluorescence_url, dataset?.fluorescence_outline_url])
+  }, [dataset?.fluorescence_url, dataset?.fluorescence_outline_url])
 
   const currentLayer = availableLayers[layerIndex % availableLayers.length] ?? 'ion'
+  // Hold overrides the tapped layer with TIC spectrum
+  const displayedLayer: Layer = showTicOverride && !!current?.tic_image_url ? 'tic' : currentLayer
 
   const cycleLayer = useCallback(() => {
     if (availableLayers.length <= 1) return
@@ -185,7 +217,7 @@ export default function AnnotatePage() {
   }, [availableLayers.length])
 
   // Reset to the ion layer whenever the card changes
-  useEffect(() => { setLayerIndex(0) }, [current?.id])
+  useEffect(() => { setLayerIndex(0); setShowTicOverride(false) }, [current?.id])
 
   // When the queue exhausts, refresh the dataset so the header and session-start
   // screen show the true my_annotation_count for next time.
@@ -478,16 +510,17 @@ export default function AnnotatePage() {
 
               {/* Ion image card — key={current.id} forces a fresh DOM element per ion so
                   React never reuses the element from the previous card's fly-off animation.
-                  Tap cycles through available reference layers (TIC, fluorescence, overlay). */}
+                  Tap cycles through reference layers. Hold to peek at TIC spectrum. */}
               <div
                 key={current.id}
+                ref={cardRef}
                 {...bind()}
                 className={`absolute inset-0 rounded-xl overflow-hidden shadow-2xl${!isDragging && !anim ? ' animate-fade-in' : ''}`}
                 style={cardStyle}
                 onClick={() => { if (!isDragging) cycleLayer() }}
               >
                 {/* Ion image (default layer) */}
-                {currentLayer === 'ion' && (
+                {displayedLayer === 'ion' && (
                   <img
                     src={current.image_url}
                     alt={`Ion m/z ${current.mz_value}`}
@@ -498,7 +531,7 @@ export default function AnnotatePage() {
                 )}
 
                 {/* TIC spectrum */}
-                {currentLayer === 'tic' && (
+                {displayedLayer === 'tic' && (
                   <img
                     src={current.tic_image_url!}
                     alt="TIC spectrum"
@@ -508,7 +541,7 @@ export default function AnnotatePage() {
                 )}
 
                 {/* Fluorescence image (proportional resize, centered) */}
-                {currentLayer === 'fluorescence' && (
+                {displayedLayer === 'fluorescence' && (
                   <img
                     src={dataset?.fluorescence_url!}
                     alt="Fluorescence"
@@ -518,7 +551,7 @@ export default function AnnotatePage() {
                 )}
 
                 {/* Fluorescence + outline overlay */}
-                {currentLayer === 'fluor_overlay' && (
+                {displayedLayer === 'fluor_overlay' && (
                   <div className="absolute inset-0">
                     <img
                       src={dataset?.fluorescence_url!}
@@ -536,7 +569,7 @@ export default function AnnotatePage() {
                 )}
 
                 {/* Ion image + outline overlay */}
-                {currentLayer === 'overlay' && (
+                {displayedLayer === 'overlay' && (
                   <div className="absolute inset-0">
                     <img
                       src={current.image_url}
@@ -571,7 +604,7 @@ export default function AnnotatePage() {
                       ))}
                     </div>
                     <span className="text-xs text-white/80 bg-black/50 rounded-full px-2 py-0.5 whitespace-nowrap">
-                      {LAYER_NAMES[currentLayer]}
+                      {showTicOverride ? 'TIC spectrum (hold)' : LAYER_NAMES[displayedLayer]}
                     </span>
                   </div>
                 )}
