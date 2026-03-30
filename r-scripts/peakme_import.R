@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 # =============================================================================
-# PeakMe: Cardinal MSI → PNG Export Script  [version 1.3.8 · 2026-03-30]
+# PeakMe: Cardinal MSI → PNG Export Script  [version 1.3.9 · 2026-03-30]
 # =============================================================================
 # Exports each m/z feature in an MSImagingExperiment as a PNG image and writes
 # a metadata.csv manifest. The output folder can be zipped and uploaded to
@@ -308,7 +308,7 @@ render_tic_png <- function(feat_idx, mz_values, mean_spec, out_path, w, h,
   col_txt <- "#94a3b8"   # axis tick labels
   col_lbl <- "#e2e8f0"   # peak m/z labels
 
-  grDevices::png(out_path, width = w, height = h, res = 144L, bg = col_bg)
+  grDevices::png(out_path, width = w * 2L, height = h * 2L, pointsize = 24, bg = col_bg)
   on.exit(grDevices::dev.off(), add = TRUE)
 
   if (length(mz_w) < 2L) {
