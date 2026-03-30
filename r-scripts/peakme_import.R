@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 # =============================================================================
-# PeakMe: Cardinal MSI → PNG Export Script  [version 1.3.3 · 2026-03-30]
+# PeakMe: Cardinal MSI → PNG Export Script  [version 1.3.4 · 2026-03-30]
 # =============================================================================
 # Exports each m/z feature in an MSImagingExperiment as a PNG image and writes
 # a metadata.csv manifest. The output folder can be zipped and uploaded to
@@ -308,7 +308,7 @@ render_tic_png <- function(feat_idx, mz_values, mean_spec, out_path, w, h,
   col_txt <- "#94a3b8"   # axis tick labels
   col_lbl <- "#e2e8f0"   # peak m/z labels
 
-  grDevices::png(out_path, width = w, height = h, bg = col_bg)
+  grDevices::png(out_path, width = w * 2L, height = h * 2L, res = 144L, bg = col_bg)
   on.exit(grDevices::dev.off(), add = TRUE)
 
   if (length(mz_w) < 2L) {
@@ -405,12 +405,11 @@ for (i in seq_along(mz_values)) {
   )
   writePNG(img_arr, fpath)
 
-  # TIC spectrum PNG (same name with _tic suffix, landscape aspect ratio)
+  # TIC spectrum PNG — same dimensions as ion image for seamless view transition
   if (args$export_tic) {
-    tic_h    <- max(120L, args$width %/% 2L)
     tic_path <- file.path(args$output, sprintf("%.4f_tic.png", mz_val))
     render_tic_png(i, mz_values, mean_spec, tic_path,
-                   args$width, tic_h, args$tic_window, args$tic_labels)
+                   args$width, args$height, args$tic_window, args$tic_labels)
   }
 
   metadata_rows[[i]] <- data.frame(filename = fname, mz_value = mz_val,
