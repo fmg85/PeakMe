@@ -111,12 +111,12 @@ interface WorkflowStep {
 function WorkflowDiagram() {
   const steps: WorkflowStep[] = [
     { num: '1', label: 'Install', sub: 'R packages', color: 'orange' },
-    { num: '2', label: 'Export', sub: 'PeakMe Export script', color: 'orange' },
+    { num: '2', label: 'Import', sub: 'PeakMe Import script', color: 'orange' },
     { num: '3', label: 'ZIP', sub: 'bundle output', color: 'orange' },
     { num: '4', label: 'Upload', sub: 'to PeakMe', color: 'orange' },
     { num: '5', label: 'Annotate', sub: 'swipe ions', color: 'purple' },
     { num: '6', label: 'Export CSV', sub: 'from PeakMe', color: 'purple' },
-    { num: '7', label: 'Import', sub: 'PeakMe Import script', color: 'purple' },
+    { num: '7', label: 'Export', sub: 'PeakMe Export script', color: 'purple' },
     { num: '8', label: 'Analyse', sub: 'MSE_clean in R', color: 'purple' },
   ]
 
@@ -182,11 +182,11 @@ function WorkflowDiagram() {
       <div className="flex items-center gap-6 text-xs text-gray-500">
         <div className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded-sm bg-brand-orange/20 border border-brand-orange/40" />
-          <span>PeakMe Export — Cardinal → PeakMe</span>
+          <span>PeakMe Import — Cardinal → PeakMe</span>
         </div>
         <div className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded-sm bg-brand-purple/20 border border-brand-purple/40" />
-          <span>PeakMe Import — PeakMe → R</span>
+          <span>PeakMe Export — PeakMe → R</span>
         </div>
       </div>
     </div>
@@ -213,13 +213,13 @@ export default function InstructionsPage() {
             onClick={() => download('export_cardinal_pngs.R')}
             className="rounded-lg bg-brand-orange px-4 py-2 text-sm font-medium text-white hover:bg-brand-red transition-colors"
           >
-            ↓ PeakMe Export
+            ↓ PeakMe Import
           </button>
           <button
             onClick={() => download('peakme_import.R')}
             className="rounded-lg bg-brand-purple px-4 py-2 text-sm font-medium text-white hover:opacity-90 transition-opacity"
           >
-            ↓ PeakMe Import
+            ↓ PeakMe Export
           </button>
         </div>
       </header>
@@ -230,7 +230,7 @@ export default function InstructionsPage() {
 
         {/* ── PART 1 label ── */}
         <div className="rounded-lg border border-brand-orange/20 px-5 py-2.5">
-          <span className="text-xs font-semibold uppercase tracking-widest text-brand-orange">PeakMe Export — Cardinal → PeakMe</span>
+          <span className="text-xs font-semibold uppercase tracking-widest text-brand-orange">PeakMe Import — Cardinal → PeakMe</span>
         </div>
 
         <CollapsibleSection title="Step 1 — Install R Dependencies">
@@ -242,7 +242,7 @@ BiocManager::install("Cardinal")
 install.packages(c("viridis", "optparse", "png"))`}</CodeBlock>
         </CollapsibleSection>
 
-        <CollapsibleSection title="Step 2 — Run the PeakMe Export Script">
+        <CollapsibleSection title="Step 2 — Run the PeakMe Import Script">
           <p className="text-sm text-gray-400">
             The script works with any <code className="rounded bg-gray-800 px-1 text-green-300">MSImagingExperiment</code> — raw read-in, peak-picked, aligned, filtered, whatever state your data is in.
           </p>
@@ -319,7 +319,7 @@ Rscript export_cardinal_pngs.R \\
 
         {/* ── PART 2 label ── */}
         <div className="rounded-lg border border-brand-purple/20 px-5 py-2.5 mt-6">
-          <span className="text-xs font-semibold uppercase tracking-widest text-brand-purple">PeakMe Import — PeakMe → R</span>
+          <span className="text-xs font-semibold uppercase tracking-widest text-brand-purple">PeakMe Export — PeakMe → R</span>
         </div>
 
         <CollapsibleSection title="Step 5 — Export Annotations from PeakMe">
@@ -336,7 +336,7 @@ Rscript export_cardinal_pngs.R \\
           </p>
         </CollapsibleSection>
 
-        <CollapsibleSection title="Step 6 — Run the PeakMe Import Script">
+        <CollapsibleSection title="Step 6 — Run the PeakMe Export Script">
           <p className="text-sm text-gray-400">
             <code className="rounded bg-gray-800 px-1 text-green-300">peakme_import.R</code> reads the CSV, matches each annotation back to the correct m/z feature in your <code className="rounded bg-gray-800 px-1 text-green-300">MSImagingExperiment</code>, and creates a filtered object ready for downstream analysis.
           </p>

@@ -1,12 +1,12 @@
 # PeakMe R Workflow
 
 This guide covers both directions of the PeakMe R workflow:
-- **PeakMe Export:** render ion images in R and upload to PeakMe for annotation
-- **PeakMe Import:** pull PeakMe annotations back into R and create a filtered experiment
+- **PeakMe Import:** render ion images in R and upload to PeakMe for annotation
+- **PeakMe Export:** pull PeakMe annotations back into R and create a filtered experiment
 
 ---
 
-## PeakMe Export (Cardinal → PeakMe)
+## PeakMe Import (Cardinal → PeakMe)
 
 ### Overview
 
@@ -34,9 +34,9 @@ install.packages(c("viridis", "optparse", "png"))
 
 ---
 
-### 2. Run the PeakMe Export Script
+### 2. Run the PeakMe Import Script
 
-Download `export_cardinal_pngs.R` from the PeakMe instructions page (↓ PeakMe Export button).
+Download `export_cardinal_pngs.R` from the PeakMe instructions page (↓ PeakMe Import button).
 
 #### Option A: RStudio (interactive)
 
@@ -116,7 +116,7 @@ filename,mz_value
 
 ---
 
-## PeakMe Import (PeakMe → R)
+## PeakMe Export (PeakMe → R)
 
 After annotating in PeakMe, use `peakme_import.R` to attach labels back to your `MSImagingExperiment` and create a filtered object for downstream analysis.
 
@@ -130,11 +130,11 @@ The CSV contains one row per annotated ion with columns: `mz_value`, `label_name
 
 ---
 
-### 6. Run the PeakMe Import Script
+### 6. Run the PeakMe Export Script
 
-Download `peakme_import.R` from the PeakMe instructions page (↓ PeakMe Import button).
+Download `peakme_import.R` from the PeakMe instructions page (↓ PeakMe Export button).
 
-**Dependency:** only `Cardinal` (already installed from the PeakMe Export step).
+**Dependency:** only `Cardinal` (already installed from the PeakMe Import step).
 
 #### RStudio (interactive)
 
@@ -184,8 +184,8 @@ The script also prints a coverage summary and label breakdown to the Console.
 
 ## Tips
 
-- **Large datasets:** The PeakMe Export script prints rate and ETA every 100 ions.
-- **m/z matching:** The PeakMe Import script uses exact float matching. m/z values are bit-for-bit identical round-tripping through R → PostgreSQL → CSV → R. A nearest-neighbour fallback within 0.001 Da handles edge cases and warns you.
+- **Large datasets:** The PeakMe Import script prints rate and ETA every 100 ions.
+- **m/z matching:** The PeakMe Export script uses exact float matching. m/z values are bit-for-bit identical round-tripping through R → PostgreSQL → CSV → R. A nearest-neighbour fallback within 0.001 Da handles edge cases and warns you.
 - **Multiple annotators:** `multi_annotator = "last"` keeps the most recently updated label per ion; `"first"` keeps whichever row appears first in the CSV.
 - **Colormap:** `viridis` is perceptually uniform and colorblind-friendly. Use the same colormap within a project for consistent comparison.
 - **Normalization:** RMS works well for most peak-picked experiments. Use `none` if you have already normalized in your Cardinal workflow.
