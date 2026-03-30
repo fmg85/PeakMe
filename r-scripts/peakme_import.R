@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 # =============================================================================
-# PeakMe: Cardinal MSI → PNG Export Script  [version 1.3.5 · 2026-03-30]
+# PeakMe: Cardinal MSI → PNG Export Script  [version 1.3.6 · 2026-03-30]
 # =============================================================================
 # Exports each m/z feature in an MSImagingExperiment as a PNG image and writes
 # a metadata.csv manifest. The output folder can be zipped and uploaded to
@@ -318,7 +318,7 @@ render_tic_png <- function(feat_idx, mz_values, mean_spec, out_path, w, h,
 
   int_max <- max(int_w, na.rm = TRUE)
   if (is.na(int_max) || int_max <= 0) int_max <- 1
-  y_top <- int_max * 1.25   # headroom for peak labels
+  y_top <- int_max * 1.7   # headroom for larger peak labels
 
   op <- graphics::par(
     bg      = col_bg,
@@ -326,9 +326,9 @@ render_tic_png <- function(feat_idx, mz_values, mean_spec, out_path, w, h,
     col.lab = col_txt,
     col.axis= col_txt,
     fg      = col_ax,
-    mar     = c(3.8, 4.5, 2.0, 1.0),
+    mar     = c(5.5, 6.5, 2.5, 1.5),
     tcl     = -0.3,
-    mgp     = c(2.5, 0.5, 0),
+    mgp     = c(4.0, 1.0, 0),
     family  = "sans",
     yaxs    = "i"
   )
@@ -343,29 +343,80 @@ render_tic_png <- function(feat_idx, mz_values, mean_spec, out_path, w, h,
   )
 
   # Axes
-  graphics::axis(1, col = col_ax, col.ticks = col_ax, col.axis = col_txt, cex.axis = 0.72)
+  graphics::axis(1, col = col_ax, col.ticks = col_ax, col.axis = col_txt, cex.axis = 1.44)
   y_ticks <- graphics::axTicks(2)
   graphics::axis(2, at = y_ticks, col = col_ax, col.ticks = col_ax, col.axis = col_txt,
-                 cex.axis = 0.72, las = 1,
+                 cex.axis = 1.44, las = 1,
                  labels = format(y_ticks, scientific = TRUE, digits = 2))
-  graphics::title(xlab = "m/z",                  col.lab = col_txt, cex.lab = 0.85, line = 2.2)
-  graphics::title(ylab = "Total Ion Intensity",   col.lab = col_txt, cex.lab = 0.85, line = 3.2)
+  graphics::title(xlab = "m/z",                  col.lab = col_txt, cex.lab = 1.70, line = 3.8)
+  graphics::title(ylab = "Total Ion Intensity",   col.lab = col_txt, cex.lab = 1.70, line = 5.0)
 
-  # Orange vertical marker at the target m/z
-  graphics::abline(v = target_mz, col = col_mkr, lwd = 1.5, lty = 1)
+  # Orange vertical marker — clipped at actual peak height, never into label headroom
+  graphics::segments(x0 = target_mz, y0 = 0, x1 = target_mz, y1 = int_max,
+                     col = col_mkr, lwd = 1.5, lty = 1)
 
-  # Label top-N peaks by intensity
+  # ── Peak labels: collision-aware placement with angled dotted leader lines ──
+  lbl_cex <- 1.80
   n_top   <- min(n_label, length(mz_w))
   top_idx <- order(int_w, decreasing = TRUE)[seq_len(n_top)]
-  graphics::text(
-    x      = mz_w[top_idx],
-    y      = int_w[top_idx],
-    labels = sprintf("%.4f", mz_w[top_idx]),
-    col    = col_lbl,
-    cex    = 0.72,
-    pos    = 3,       # above the bar tip
-    offset = 0.25
-  )
+
+  # Sort selected peaks by m/z for left-to-right layout
+  lbl_mz  <- mz_w[top_idx]
+  lbl_int <- int_w[top_idx]
+  lbl_txt <- sprintf("%.4f", lbl_mz)
+  srt     <- order(lbl_mz)
+  lbl_mz  <- lbl_mz[srt]
+  lbl_int <- lbl_int[srt]
+  lbl_txt <- lbl_txt[srt]
+
+  ch_w  <- graphics::strwidth("0.0000",  cex = lbl_cex)
+  ch_h  <- graphics::strheight("0.0000", cex = lbl_cex)
+  v_gap <- ch_h * 0.35
+
+  # Label anchor = centre of text box — initially just above each peak tip
+  px <- lbl_mz
+  py <- lbl_int + v_gap + ch_h * 0.5
+
+  # Iterative relaxation: spread overlapping label boxes apart in x and y
+  for (pass in seq_len(40L)) {
+    changed <- FALSE
+    for (j in seq_len(length(px) - 1L)) {
+      ox <- ch_w * 1.15 - abs(px[j+1] - px[j])
+      oy <- ch_h * 1.15 - abs(py[j+1] - py[j])
+      if (ox > 0 && oy > 0) {
+        # Nudge horizontally to produce angled leader lines
+        push_x <- ox * 0.45
+        if (px[j+1] >= px[j]) {
+          px[j]   <- px[j]   - push_x
+          px[j+1] <- px[j+1] + push_x
+        } else {
+          px[j]   <- px[j]   + push_x
+          px[j+1] <- px[j+1] - push_x
+        }
+        # Nudge higher label further upward
+        py[j+1] <- py[j+1] + oy * 0.6
+        changed <- TRUE
+      }
+    }
+    if (!changed) break
+  }
+  py <- pmin(py, y_top - ch_h * 0.6)
+
+  # Dotted angled leader lines — only drawn when label has visibly moved from peak tip
+  col_lead <- adjustcolor(col_txt, alpha.f = 0.5)
+  for (j in seq_along(px)) {
+    lbl_bot <- py[j] - ch_h * 0.5
+    tip_y   <- lbl_int[j]
+    displaced <- lbl_bot > tip_y + v_gap * 1.5 || abs(px[j] - lbl_mz[j]) > ch_w * 0.15
+    if (displaced) {
+      graphics::segments(x0 = lbl_mz[j], y0 = tip_y,
+                         x1 = px[j],     y1 = lbl_bot,
+                         col = col_lead, lwd = 0.7, lty = 3)
+    }
+  }
+
+  graphics::text(px, py, labels = lbl_txt, col = col_lbl,
+                 cex = lbl_cex, adj = c(0.5, 0.5))
 
   invisible(NULL)
 }

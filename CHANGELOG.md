@@ -12,7 +12,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - perf: TIC spectrum visual tweaks (v1.3.3): window ±0.5 Da, white hairline bars, 50% opacity marker, axis-matched label size, y-axis gap removed
 - perf: TIC PNG rendered at 2× resolution (res=144) for crisp antialiased text; dimensions now match ion image exactly for seamless view transition (v1.3.4)
 - feat: new layer cycle order — Ion → TIC → Fluorescence → Fluorescence+outline → Ion+outline → repeat
-- perf: TIC plot margins tuned for square output format (v1.3.5): window halved to ±0.5 Da, white hairline bars, 50% opacity marker line, axis-matched peak label size, y-axis gap removed
+- perf: TIC plot margins tuned for square output format (v1.3.5)
+- perf: TIC spectrum label improvements (v1.3.6): 2× axis fonts, 2.5× peak label font, marker clipped at peak height, collision-aware label placement with angled dotted leader lines: window halved to ±0.5 Da, white hairline bars, 50% opacity marker line, axis-matched peak label size, y-axis gap removed
 - fix: replace backslash escapes in R scripts with single-quotes / spaces — Vercel converts `\` → `/` when serving static .R files, causing parse errors on download (v1.3.1)
 - feat: R script version numbers displayed on instructions page next to each download button (v1.3.0 / v1.1.0); version comment in script header so downloaded files are self-identifying in R script, docs, and instructions page (clearer naming — "upload" matches the next step of uploading to PeakMe)
 - feat: reference layers — tap the ion image card to cycle through: Ion image → TIC spectrum → Fluorescence → Ion + outline → repeat; only layers with data available are shown
