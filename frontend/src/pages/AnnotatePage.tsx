@@ -8,12 +8,13 @@ import type { Dataset, DatasetLabelSummary, IonQueueItem, LabelOption, Project }
 
 type AnimDirection = 'left' | 'right' | 'up' | 'down' | null
 type SwipeDir = 'left' | 'right' | 'up' | 'down'
-type Layer = 'ion' | 'tic' | 'fluorescence' | 'overlay'
+type Layer = 'ion' | 'tic' | 'fluorescence' | 'fluor_overlay' | 'overlay'
 
 const LAYER_NAMES: Record<Layer, string> = {
   ion: 'Ion image',
   tic: 'TIC spectrum',
   fluorescence: 'Fluorescence',
+  fluor_overlay: 'Fluorescence + outline',
   overlay: 'Ion + outline',
 }
 
@@ -166,11 +167,12 @@ export default function AnnotatePage() {
     : sessionAnnotations
   const remaining_unannotated = Math.max(0, total - baselineAnnotations - (strategy === 'unannotated_first' ? sessionAnnotations : 0))
 
-  // Layer cycling: ion image → TIC spectrum → fluorescence → outline overlay → repeat
+  // Layer cycling: ion → TIC → fluorescence → fluor+outline → ion+outline → repeat
   const availableLayers = useMemo((): Layer[] => {
     const layers: Layer[] = ['ion']
     if (current?.tic_image_url) layers.push('tic')
     if (dataset?.fluorescence_url) layers.push('fluorescence')
+    if (dataset?.fluorescence_url && dataset?.fluorescence_outline_url) layers.push('fluor_overlay')
     if (dataset?.fluorescence_outline_url) layers.push('overlay')
     return layers
   }, [current?.tic_image_url, dataset?.fluorescence_url, dataset?.fluorescence_outline_url])
@@ -515,7 +517,25 @@ export default function AnnotatePage() {
                   />
                 )}
 
-                {/* Overlay: ion image with transparent-PNG fluorescence outline on top. */}
+                {/* Fluorescence + outline overlay */}
+                {currentLayer === 'fluor_overlay' && (
+                  <div className="absolute inset-0">
+                    <img
+                      src={dataset?.fluorescence_url!}
+                      alt="Fluorescence"
+                      className="w-full h-full block object-contain"
+                      draggable={false}
+                    />
+                    <img
+                      src={dataset?.fluorescence_outline_url!}
+                      alt="Fluorescence outline"
+                      className="absolute inset-0 w-full h-full block object-contain"
+                      draggable={false}
+                    />
+                  </div>
+                )}
+
+                {/* Ion image + outline overlay */}
                 {currentLayer === 'overlay' && (
                   <div className="absolute inset-0">
                     <img

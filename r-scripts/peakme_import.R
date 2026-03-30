@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 # =============================================================================
-# PeakMe: Cardinal MSI → PNG Export Script  [version 1.3.4 · 2026-03-30]
+# PeakMe: Cardinal MSI → PNG Export Script  [version 1.3.5 · 2026-03-30]
 # =============================================================================
 # Exports each m/z feature in an MSImagingExperiment as a PNG image and writes
 # a metadata.csv manifest. The output folder can be zipped and uploaded to
@@ -326,9 +326,9 @@ render_tic_png <- function(feat_idx, mz_values, mean_spec, out_path, w, h,
     col.lab = col_txt,
     col.axis= col_txt,
     fg      = col_ax,
-    mar     = c(4.5, 5.0, 1.5, 1.5),
+    mar     = c(3.8, 4.5, 2.0, 1.0),
     tcl     = -0.3,
-    mgp     = c(3, 0.5, 0),
+    mgp     = c(2.5, 0.5, 0),
     family  = "sans",
     yaxs    = "i"
   )
@@ -348,8 +348,8 @@ render_tic_png <- function(feat_idx, mz_values, mean_spec, out_path, w, h,
   graphics::axis(2, at = y_ticks, col = col_ax, col.ticks = col_ax, col.axis = col_txt,
                  cex.axis = 0.72, las = 1,
                  labels = format(y_ticks, scientific = TRUE, digits = 2))
-  graphics::title(xlab = "m/z",                  col.lab = col_txt, cex.lab = 0.85, line = 2.8)
-  graphics::title(ylab = "Total Ion Intensity",   col.lab = col_txt, cex.lab = 0.85, line = 3.8)
+  graphics::title(xlab = "m/z",                  col.lab = col_txt, cex.lab = 0.85, line = 2.2)
+  graphics::title(ylab = "Total Ion Intensity",   col.lab = col_txt, cex.lab = 0.85, line = 3.2)
 
   # Orange vertical marker at the target m/z
   graphics::abline(v = target_mz, col = col_mkr, lwd = 1.5, lty = 1)
