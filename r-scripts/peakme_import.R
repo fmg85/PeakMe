@@ -62,8 +62,10 @@ if (interactive()) {
     colormap   = "viridis",  # viridis | magma | plasma | inferno | cividis
     normalize  = "rms",      # rms | tic | none
     zip        = TRUE,       # TRUE = create a .zip ready to upload to PeakMe
-    export_tic = TRUE        # TRUE = generate a TIC spectrum PNG per ion image
-                             # (adds ~20-50% to export time; included in the ZIP)
+    export_tic = TRUE,       # TRUE = generate a TIC spectrum PNG per ion image
+                             # (adds time to export; included in the ZIP)
+    tic_window = 1.0,        # ± Da window around each ion's m/z in TIC plot
+    tic_labels = 5L          # number of highest peaks to label with their m/z
   )
 } else {
   # ---------------------------------------------------------------------------
@@ -103,6 +105,14 @@ if (interactive()) {
     make_option("--no-tic",
       action = "store_true", default = FALSE,
       help = "Skip TIC spectrum PNG generation (faster export, smaller ZIP)"
+    ),
+    make_option("--tic-window",
+      type = "double", default = 1.0,
+      help = "±Da window around each ion's m/z shown in TIC plot [default: 1.0]"
+    ),
+    make_option("--tic-labels",
+      type = "integer", default = 5L,
+      help = "Number of highest peaks to label with m/z in TIC plot [default: 5]"
     )
   )
 
@@ -114,6 +124,8 @@ if (interactive()) {
   args <- parse_args(parser)
   args$msi_object <- NULL
   args$export_tic <- !args[["no-tic"]]
+  args$tic_window <- args[["tic-window"]]
+  args$tic_labels <- args[["tic-labels"]]
   args$msi_file   <- args$file
 
   if (is.null(args$msi_file)) {
@@ -276,58 +288,84 @@ if (args$export_tic) {
 }
 
 # ── TIC spectrum renderer ─────────────────────────────────────────────────────
-# Renders the mean mass spectrum in a ±2 Da window around the target m/z as a
-# raw pixel array (same writePNG approach as ion images — no graphics device).
-render_tic_png <- function(feat_idx, mz_values, mean_spec, w, h) {
+# Renders the mean mass spectrum in a ±window_da window around the target m/z.
+# Uses a png() graphics device so axes, labels, and peak annotations render
+# correctly. Writes directly to out_path.
+render_tic_png <- function(feat_idx, mz_values, mean_spec, out_path, w, h,
+                           window_da = 1.0, n_label = 5L) {
   target_mz <- mz_values[feat_idx]
-  lo   <- target_mz - 2; hi <- target_mz + 2
-  mask <- mz_values >= lo & mz_values <= hi
+  lo <- target_mz - window_da
+  hi <- target_mz + window_da
+  mask  <- mz_values >= lo & mz_values <= hi
   mz_w  <- mz_values[mask]
   int_w <- mean_spec[mask]
 
-  # Dark theme matching the PeakMe UI
-  bg  <- c(0.059, 0.090, 0.165)  # #0f172a  (background)
-  lc  <- c(0.655, 0.545, 0.980)  # #a78bfa  (spectrum bar, purple)
-  mkr <- c(0.976, 0.451, 0.086)  # #f97316  (target m/z marker, orange)
+  # Dark theme colours
+  col_bg  <- "#0f172a"
+  col_bar <- "#a78bfa"   # purple bars
+  col_mkr <- "#f97316"   # orange target marker
+  col_ax  <- "#64748b"   # axis lines / ticks
+  col_txt <- "#94a3b8"   # axis tick labels
+  col_lbl <- "#e2e8f0"   # peak m/z labels
 
-  r_ch <- matrix(bg[1L], nrow = h, ncol = w)
-  g_ch <- matrix(bg[2L], nrow = h, ncol = w)
-  b_ch <- matrix(bg[3L], nrow = h, ncol = w)
+  grDevices::png(out_path, width = w, height = h, bg = col_bg)
+  on.exit(grDevices::dev.off(), add = TRUE)
 
-  if (length(mz_w) >= 2L) {
-    pad    <- max(1L, as.integer(w * 0.04))
-    pw     <- w - 2L * pad
-    pt     <- max(1L, as.integer(h * 0.06))   # top margin (px)
-    ph     <- h - pt - max(1L, as.integer(h * 0.12))  # usable height (px)
-
-    mz_rng  <- range(mz_w)
-    int_max <- max(int_w, na.rm = TRUE)
-    if (is.na(int_max) || int_max <= 0) int_max <- 1
-
-    cx    <- pad + pmax(1L, pmin(pw, as.integer(
-                (mz_w - mz_rng[1L]) / (mz_rng[2L] - mz_rng[1L]) * (pw - 1L)) + 1L))
-    int_n <- pmax(0, pmin(1, int_w / int_max))
-    top_r <- pt + pmax(0L, as.integer((1 - int_n) * (ph - 1L)))
-    bot_r <- pt + ph - 1L
-
-    for (j in seq_along(mz_w)) {
-      rows <- top_r[j]:bot_r
-      r_ch[rows, cx[j]] <- lc[1L]
-      g_ch[rows, cx[j]] <- lc[2L]
-      b_ch[rows, cx[j]] <- lc[3L]
-    }
-
-    # Orange marker at the target m/z
-    if (target_mz >= mz_rng[1L] && target_mz <= mz_rng[2L]) {
-      mx <- pad + pmax(1L, pmin(pw, as.integer(
-              (target_mz - mz_rng[1L]) / (mz_rng[2L] - mz_rng[1L]) * (pw - 1L)) + 1L))
-      r_ch[pt:bot_r, mx] <- mkr[1L]
-      g_ch[pt:bot_r, mx] <- mkr[2L]
-      b_ch[pt:bot_r, mx] <- mkr[3L]
-    }
+  if (length(mz_w) < 2L) {
+    graphics::plot.new()
+    return(invisible(NULL))
   }
 
-  array(c(r_ch, g_ch, b_ch), dim = c(h, w, 3L))
+  int_max <- max(int_w, na.rm = TRUE)
+  if (is.na(int_max) || int_max <= 0) int_max <- 1
+  y_top <- int_max * 1.25   # headroom for peak labels
+
+  op <- graphics::par(
+    bg      = col_bg,
+    col     = col_bar,
+    col.lab = col_txt,
+    col.axis= col_txt,
+    fg      = col_ax,
+    mar     = c(4.5, 5.0, 1.5, 1.5),
+    tcl     = -0.3,
+    mgp     = c(3, 0.5, 0),
+    family  = "sans"
+  )
+  on.exit(graphics::par(op), add = TRUE)
+
+  graphics::plot(
+    mz_w, int_w,
+    type = "h", lwd = 2, col = col_bar,
+    xlim = c(lo, hi), ylim = c(0, y_top),
+    xlab = "", ylab = "",
+    axes = FALSE
+  )
+
+  # Axes
+  graphics::axis(1, col = col_ax, col.ticks = col_ax, col.axis = col_txt, cex.axis = 0.72)
+  graphics::axis(2, col = col_ax, col.ticks = col_ax, col.axis = col_txt,
+                 cex.axis = 0.72, las = 1,
+                 labels = format(graphics::axTicks(2), scientific = TRUE, digits = 2))
+  graphics::title(xlab = "m/z",                  col.lab = col_txt, cex.lab = 0.85, line = 2.8)
+  graphics::title(ylab = "Total Ion Intensity",   col.lab = col_txt, cex.lab = 0.85, line = 3.8)
+
+  # Orange vertical marker at the target m/z
+  graphics::abline(v = target_mz, col = col_mkr, lwd = 1.5, lty = 1)
+
+  # Label top-N peaks by intensity
+  n_top   <- min(n_label, length(mz_w))
+  top_idx <- order(int_w, decreasing = TRUE)[seq_len(n_top)]
+  graphics::text(
+    x      = mz_w[top_idx],
+    y      = int_w[top_idx],
+    labels = sprintf("%.4f", mz_w[top_idx]),
+    col    = col_lbl,
+    cex    = 0.58,
+    pos    = 3,       # above the bar tip
+    offset = 0.25
+  )
+
+  invisible(NULL)
 }
 
 metadata_rows <- vector("list", n_features)
@@ -367,9 +405,10 @@ for (i in seq_along(mz_values)) {
 
   # TIC spectrum PNG (same name with _tic suffix, landscape aspect ratio)
   if (args$export_tic) {
-    tic_h   <- max(100L, args$width %/% 2L)   # e.g. 400 wide → 200 tall
-    tic_arr <- render_tic_png(i, mz_values, mean_spec, args$width, tic_h)
-    writePNG(tic_arr, file.path(args$output, sprintf("%.4f_tic.png", mz_val)))
+    tic_h    <- max(120L, args$width %/% 2L)
+    tic_path <- file.path(args$output, sprintf("%.4f_tic.png", mz_val))
+    render_tic_png(i, mz_values, mean_spec, tic_path,
+                   args$width, tic_h, args$tic_window, args$tic_labels)
   }
 
   metadata_rows[[i]] <- data.frame(filename = fname, mz_value = mz_val,

@@ -42,6 +42,8 @@ function OptionTable() {
     ['--colormap', 'viridis', 'Color scale: viridis, magma, plasma, inferno, cividis'],
     ['--normalize', 'rms', 'Normalization: tic, rms, none'],
     ['--zip', 'off', 'Automatically zip the output folder'],
+    ['--tic-window', '1.0', '±Da window around each ion shown in TIC spectrum plot'],
+    ['--tic-labels', '5', 'Number of highest peaks to annotate with m/z in TIC plot'],
   ]
   return (
     <div className="overflow-x-auto rounded-lg border border-gray-800">
