@@ -8,6 +8,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## Unreleased
 
 - fix: rename default output folder from `peakme_export` → `peakme_upload`
+- fix: TIC Y-axis crash — `labels` argument requires `at` in `graphics::axis()` (v1.3.2)
 - fix: replace backslash escapes in R scripts with single-quotes / spaces — Vercel converts `\` → `/` when serving static .R files, causing parse errors on download (v1.3.1)
 - feat: R script version numbers displayed on instructions page next to each download button (v1.3.0 / v1.1.0); version comment in script header so downloaded files are self-identifying in R script, docs, and instructions page (clearer naming — "upload" matches the next step of uploading to PeakMe)
 - feat: reference layers — tap the ion image card to cycle through: Ion image → TIC spectrum → Fluorescence → Ion + outline → repeat; only layers with data available are shown

@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 # =============================================================================
-# PeakMe: Cardinal MSI → PNG Export Script  [version 1.3.1 · 2026-03-30]
+# PeakMe: Cardinal MSI → PNG Export Script  [version 1.3.2 · 2026-03-30]
 # =============================================================================
 # Exports each m/z feature in an MSImagingExperiment as a PNG image and writes
 # a metadata.csv manifest. The output folder can be zipped and uploaded to
@@ -343,9 +343,10 @@ render_tic_png <- function(feat_idx, mz_values, mean_spec, out_path, w, h,
 
   # Axes
   graphics::axis(1, col = col_ax, col.ticks = col_ax, col.axis = col_txt, cex.axis = 0.72)
-  graphics::axis(2, col = col_ax, col.ticks = col_ax, col.axis = col_txt,
+  y_ticks <- graphics::axTicks(2)
+  graphics::axis(2, at = y_ticks, col = col_ax, col.ticks = col_ax, col.axis = col_txt,
                  cex.axis = 0.72, las = 1,
-                 labels = format(graphics::axTicks(2), scientific = TRUE, digits = 2))
+                 labels = format(y_ticks, scientific = TRUE, digits = 2))
   graphics::title(xlab = "m/z",                  col.lab = col_txt, cex.lab = 0.85, line = 2.8)
   graphics::title(ylab = "Total Ion Intensity",   col.lab = col_txt, cex.lab = 0.85, line = 3.8)
 
