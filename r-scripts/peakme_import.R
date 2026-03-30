@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 # =============================================================================
-# PeakMe: Cardinal MSI → PNG Export Script  [version 1.3.2 · 2026-03-30]
+# PeakMe: Cardinal MSI → PNG Export Script  [version 1.3.3 · 2026-03-30]
 # =============================================================================
 # Exports each m/z feature in an MSImagingExperiment as a PNG image and writes
 # a metadata.csv manifest. The output folder can be zipped and uploaded to
@@ -64,7 +64,7 @@ if (interactive()) {
     zip        = TRUE,       # TRUE = create a .zip ready to upload to PeakMe
     export_tic = TRUE,       # TRUE = generate a TIC spectrum PNG per ion image
                              # (adds time to export; included in the ZIP)
-    tic_window = 1.0,        # ± Da window around each ion's m/z in TIC plot
+    tic_window = 0.5,        # ± Da window around each ion's m/z in TIC plot
     tic_labels = 5L          # number of highest peaks to label with their m/z
   )
 } else {
@@ -107,8 +107,8 @@ if (interactive()) {
       help = "Skip TIC spectrum PNG generation (faster export, smaller ZIP)"
     ),
     make_option("--tic-window",
-      type = "double", default = 1.0,
-      help = "±Da window around each ion's m/z shown in TIC plot [default: 1.0]"
+      type = "double", default = 0.5,
+      help = "±Da window around each ion's m/z shown in TIC plot [default: 0.5]"
     ),
     make_option("--tic-labels",
       type = "integer", default = 5L,
@@ -292,7 +292,7 @@ if (args$export_tic) {
 # Uses a png() graphics device so axes, labels, and peak annotations render
 # correctly. Writes directly to out_path.
 render_tic_png <- function(feat_idx, mz_values, mean_spec, out_path, w, h,
-                           window_da = 1.0, n_label = 5L) {
+                           window_da = 0.5, n_label = 5L) {
   target_mz <- mz_values[feat_idx]
   lo <- target_mz - window_da
   hi <- target_mz + window_da
@@ -302,8 +302,8 @@ render_tic_png <- function(feat_idx, mz_values, mean_spec, out_path, w, h,
 
   # Dark theme colours
   col_bg  <- "#0f172a"
-  col_bar <- "#a78bfa"   # purple bars
-  col_mkr <- "#f97316"   # orange target marker
+  col_bar <- "#ffffff"   # white bars
+  col_mkr <- adjustcolor("#f97316", alpha.f = 0.5)  # orange target marker, 50% opacity
   col_ax  <- "#64748b"   # axis lines / ticks
   col_txt <- "#94a3b8"   # axis tick labels
   col_lbl <- "#e2e8f0"   # peak m/z labels
@@ -329,13 +329,14 @@ render_tic_png <- function(feat_idx, mz_values, mean_spec, out_path, w, h,
     mar     = c(4.5, 5.0, 1.5, 1.5),
     tcl     = -0.3,
     mgp     = c(3, 0.5, 0),
-    family  = "sans"
+    family  = "sans",
+    yaxs    = "i"
   )
   on.exit(graphics::par(op), add = TRUE)
 
   graphics::plot(
     mz_w, int_w,
-    type = "h", lwd = 2, col = col_bar,
+    type = "h", lwd = 1, col = col_bar,
     xlim = c(lo, hi), ylim = c(0, y_top),
     xlab = "", ylab = "",
     axes = FALSE
@@ -361,7 +362,7 @@ render_tic_png <- function(feat_idx, mz_values, mean_spec, out_path, w, h,
     y      = int_w[top_idx],
     labels = sprintf("%.4f", mz_w[top_idx]),
     col    = col_lbl,
-    cex    = 0.58,
+    cex    = 0.72,
     pos    = 3,       # above the bar tip
     offset = 0.25
   )
