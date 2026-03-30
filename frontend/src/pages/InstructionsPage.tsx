@@ -69,7 +69,7 @@ function OptionTable() {
 
 function ImportOptionTable() {
   const rows = [
-    ['msi_object', '"MSE_process"', 'Name of your MSImagingExperiment variable in the R session'],
+    ['msi_object', '"mse_process"', 'Name of your MSImagingExperiment variable in the R session'],
     ['csv_file', '"peakme_annotations.csv"', 'Path to the CSV exported from PeakMe'],
     ['multi_annotator', '"last"', 'When multiple annotators labelled the same ion: "first" or "last" (by timestamp)'],
     ['labels_to_remove', 'c("matrix", "noise")', 'Labels to strip out when creating MSE_clean'],
@@ -256,7 +256,7 @@ install.packages(c("viridis", "optparse", "png"))`}</CodeBlock>
             <p className="text-xs text-gray-400 pl-4">
               <strong className="text-gray-200">Option A</strong> — object already in your session (e.g. after loading or processing in Cardinal):
             </p>
-            <CodeBlock>{`msi_object = "MSE_process",  # name of your MSImagingExperiment variable
+            <CodeBlock>{`msi_object = "mse_process",  # name of your MSImagingExperiment variable
                              # run ls() in the Console to see what's loaded
 msi_file   = NULL,`}</CodeBlock>
             <p className="text-xs text-gray-400 pl-4">
@@ -347,7 +347,7 @@ Rscript peakme_import.R \\
               <li>Make sure your <code className="rounded bg-gray-800 px-1 text-green-300">MSImagingExperiment</code> is loaded in the session (same object you exported from)</li>
               <li>Open <code className="rounded bg-gray-800 px-1 text-green-300">peakme_export.R</code> and edit the config block:</li>
             </ol>
-            <CodeBlock>{`msi_object       = "MSE_process",         # name of your MSE variable
+            <CodeBlock>{`msi_object       = "mse_process",         # name of your MSE variable
 csv_file         = "peakme_annotations.csv", # path to the downloaded CSV
 labels_to_remove = c("matrix", "noise"),     # labels to strip for MSE_clean
 unannotated      = "keep"                    # "keep" or "remove" unannotated ions`}</CodeBlock>
@@ -359,10 +359,10 @@ unannotated      = "keep"                    # "keep" or "remove" unannotated io
 
           <h3 className="text-sm font-medium text-gray-300 mt-5">What the script produces</h3>
           <p className="text-sm text-gray-400">It adds four columns to <code className="rounded bg-gray-800 px-1 text-green-300">fData()</code> of your existing MSE object:</p>
-          <CodeBlock>{`fData(MSE_process)$peakme_label      # "liver", "kidney", NA (unannotated), …
-fData(MSE_process)$peakme_starred    # TRUE / FALSE / NA
-fData(MSE_process)$peakme_confidence # 1 (low) · 2 (medium) · 3 (high) · NA
-fData(MSE_process)$peakme_annotator  # annotator display name · NA`}</CodeBlock>
+          <CodeBlock>{`fData(mse_process)$peakme_label      # "liver", "kidney", NA (unannotated), …
+fData(mse_process)$peakme_starred    # TRUE / FALSE / NA
+fData(mse_process)$peakme_confidence # 1 (low) · 2 (medium) · 3 (high) · NA
+fData(mse_process)$peakme_annotator  # annotator display name · NA`}</CodeBlock>
           <p className="text-sm text-gray-400">It also creates <code className="rounded bg-gray-800 px-1 text-green-300">MSE_clean</code> in your session — the same experiment with <code className="rounded bg-gray-800 px-1 text-green-300">labels_to_remove</code> features filtered out:</p>
           <CodeBlock>{`# Example: 5,072 total → 655 noise/matrix removed → 4,417 features kept
 MSE_clean   # use this for downstream analysis, dimensionality reduction, etc.`}</CodeBlock>
@@ -397,7 +397,7 @@ MSE_clean   # use this for downstream analysis, dimensionality reduction, etc.`}
               <span className="text-brand-orange flex-shrink-0">•</span>
               <span>
                 <strong className="text-white">Subsetting m/z range before export:</strong>
-                <CodeBlock>{'msi_subset <- MSE_process[mz(MSE_process) > 700 & mz(MSE_process) < 900, ]\n# then set msi_object = "msi_subset" in the export config'}</CodeBlock>
+                <CodeBlock>{'msi_subset <- mse_process[mz(mse_process) > 700 & mz(mse_process) < 900, ]\n# then set msi_object = "msi_subset" in the export config'}</CodeBlock>
               </span>
             </li>
           </ul>

@@ -45,7 +45,7 @@ If your MSImagingExperiment is already loaded in your R session:
 1. Open `peakme_export.R` in RStudio
 2. Edit the config block near the top:
    ```r
-   msi_object = "MSE_process"     # name of your variable — run ls() to check
+   msi_object = "mse_process"     # name of your variable — run ls() to check
    output     = "./peakme_export"
    ```
 3. Click **Source** (Ctrl+Shift+S on Windows · Cmd+Shift+S on Mac)
@@ -143,7 +143,7 @@ Download `peakme_export.R` from the PeakMe instructions page (↓ PeakMe Export 
 1. Make sure your `MSImagingExperiment` is loaded in the session (the same object you exported from)
 2. Open `peakme_export.R` and edit the config block:
    ```r
-   msi_object       = "MSE_process"           # name of your MSE variable
+   msi_object       = "mse_process"           # name of your MSE variable
    csv_file         = "peakme_annotations.csv" # path to the PeakMe CSV
    labels_to_remove = c("matrix", "noise")     # labels to strip for MSE_clean
    unannotated      = "keep"                   # "keep" (label = NA) or "remove"
@@ -154,7 +154,7 @@ Download `peakme_export.R` from the PeakMe instructions page (↓ PeakMe Export 
 
 | Setting | Default | Description |
 |---|---|---|
-| `msi_object` | `"MSE_process"` | Name of your MSImagingExperiment variable in the R session |
+| `msi_object` | `"mse_process"` | Name of your MSImagingExperiment variable in the R session |
 | `csv_file` | `"peakme_annotations.csv"` | Path to the CSV exported from PeakMe |
 | `multi_annotator` | `"last"` | When multiple annotators labelled the same ion: `"first"` or `"last"` (by timestamp) |
 | `labels_to_remove` | `c("matrix", "noise")` | Labels to strip out when creating `MSE_clean` |
@@ -167,10 +167,10 @@ Download `peakme_export.R` from the PeakMe instructions page (↓ PeakMe Export 
 **Annotation columns added to `fData()`** of your existing MSE object:
 
 ```r
-fData(MSE_process)$peakme_label      # "liver", "kidney", NA (unannotated), …
-fData(MSE_process)$peakme_starred    # TRUE / FALSE / NA
-fData(MSE_process)$peakme_confidence # 1 (low) · 2 (medium) · 3 (high) · NA
-fData(MSE_process)$peakme_annotator  # annotator display name · NA
+fData(mse_process)$peakme_label      # "liver", "kidney", NA (unannotated), …
+fData(mse_process)$peakme_starred    # TRUE / FALSE / NA
+fData(mse_process)$peakme_confidence # 1 (low) · 2 (medium) · 3 (high) · NA
+fData(mse_process)$peakme_annotator  # annotator display name · NA
 ```
 
 **`MSE_clean`** — a new MSImagingExperiment in your session with `labels_to_remove` features filtered out:
@@ -193,6 +193,6 @@ The script also prints a coverage summary and label breakdown to the Console.
 - **Normalization:** RMS works well for most peak-picked experiments. Use `none` if you have already normalized in your Cardinal workflow.
 - **Subsetting before export:**
   ```r
-  msi_subset <- MSE_process[mz(MSE_process) > 700 & mz(MSE_process) < 900, ]
+  msi_subset <- mse_process[mz(mse_process) > 700 & mz(mse_process) < 900, ]
   # then set msi_object = "msi_subset" in the export config
   ```

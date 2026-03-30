@@ -34,7 +34,7 @@ suppressPackageStartupMessages({
 if (interactive()) {
   cfg <- list(
     # ── Your MSImagingExperiment ──────────────────────────────────────────────
-    msi_object = "MSE_process",  # EDIT ME — name of the variable in your session
+    msi_object = "mse_process",  # EDIT ME — name of the variable in your session
                                  # The same object you exported from
 
     # ── PeakMe annotation CSV ─────────────────────────────────────────────────
@@ -74,8 +74,8 @@ if (interactive()) {
       metavar = "FILE"
     ),
     make_option(c("--object"),
-      type = "character", default = "MSE_process",
-      help = "Name of MSImagingExperiment variable in --rdata file [default: MSE_process]"
+      type = "character", default = "mse_process",
+      help = "Name of MSImagingExperiment variable in --rdata file [default: mse_process]"
     ),
     make_option(c("--rdata"),
       type = "character", default = NULL,
