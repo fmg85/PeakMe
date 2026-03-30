@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 # =============================================================================
-# PeakMe: Cardinal MSI → PNG Export Script  [version 1.4.0 · 2026-03-30]
+# PeakMe: Cardinal MSI → PNG Export Script  [version 1.4.1 · 2026-03-30]
 # =============================================================================
 # Exports each m/z feature in an MSImagingExperiment as a PNG image and writes
 # a metadata.csv manifest. The output folder can be zipped and uploaded to
@@ -293,7 +293,8 @@ if (args$export_tic) {
 # correctly. Writes directly to out_path.
 render_tic_png <- function(feat_idx, mz_values, mean_spec, out_path, w, h,
                            window_da = 0.5, n_label = 5L) {
-  target_mz <- mz_values[feat_idx]
+  target_mz  <- mz_values[feat_idx]
+  target_int <- mean_spec[feat_idx]        # intensity of the annotated ion
   lo <- target_mz - window_da
   hi <- target_mz + window_da
   mask  <- mz_values >= lo & mz_values <= hi
@@ -301,12 +302,13 @@ render_tic_png <- function(feat_idx, mz_values, mean_spec, out_path, w, h,
   int_w <- mean_spec[mask]
 
   # Dark theme colours
-  col_bg  <- "#0f172a"
-  col_bar <- "#ffffff"   # white bars
-  col_mkr <- adjustcolor("#f97316", alpha.f = 0.5)  # orange target marker, 50% opacity
-  col_ax  <- "#64748b"   # axis lines / ticks
-  col_txt <- "#94a3b8"   # axis tick labels
-  col_lbl <- "#e2e8f0"   # peak m/z labels
+  col_bg   <- "#0f172a"
+  col_bar  <- "#ffffff"
+  col_mkr  <- adjustcolor("#f97316", alpha.f = 0.75)  # orange marker + label
+  col_ax   <- "#64748b"
+  col_txt  <- "#94a3b8"
+  col_lbl  <- "#e2e8f0"
+  col_lead <- "#64748b"   # guide lines — solid, no alpha (ensures visibility)
 
   grDevices::png(out_path, width = w * 2L, height = h * 2L, pointsize = 24, bg = col_bg)
   on.exit(grDevices::dev.off(), add = TRUE)
@@ -318,29 +320,17 @@ render_tic_png <- function(feat_idx, mz_values, mean_spec, out_path, w, h,
 
   int_max <- max(int_w, na.rm = TRUE)
   if (is.na(int_max) || int_max <= 0) int_max <- 1
-  y_top <- int_max * 1.7   # headroom for larger peak labels
+  y_top <- int_max * 2.0   # generous headroom for labels + marker m/z text
 
   op <- graphics::par(
-    bg      = col_bg,
-    col     = col_bar,
-    col.lab = col_txt,
-    col.axis= col_txt,
-    fg      = col_ax,
-    mar     = c(5.5, 6.5, 2.5, 1.5),
-    tcl     = -0.3,
-    mgp     = c(4.0, 1.0, 0),
-    family  = "sans",
-    yaxs    = "i"
+    bg = col_bg, col = col_bar, col.lab = col_txt, col.axis = col_txt, fg = col_ax,
+    mar = c(5.5, 6.5, 2.5, 1.5), tcl = -0.3, mgp = c(4.0, 1.0, 0),
+    family = "sans", yaxs = "i"
   )
   on.exit(graphics::par(op), add = TRUE)
 
-  graphics::plot(
-    mz_w, int_w,
-    type = "h", lwd = 1, col = col_bar,
-    xlim = c(lo, hi), ylim = c(0, y_top),
-    xlab = "", ylab = "",
-    axes = FALSE
-  )
+  graphics::plot(mz_w, int_w, type = "h", lwd = 1, col = col_bar,
+    xlim = c(lo, hi), ylim = c(0, y_top), xlab = "", ylab = "", axes = FALSE)
 
   # Axes
   graphics::axis(1, col = col_ax, col.ticks = col_ax, col.axis = col_txt, cex.axis = 1.44)
@@ -348,72 +338,74 @@ render_tic_png <- function(feat_idx, mz_values, mean_spec, out_path, w, h,
   graphics::axis(2, at = y_ticks, col = col_ax, col.ticks = col_ax, col.axis = col_txt,
                  cex.axis = 1.44, las = 1,
                  labels = format(y_ticks, scientific = TRUE, digits = 2))
-  graphics::title(xlab = "m/z",                  col.lab = col_txt, cex.lab = 1.70, line = 3.8)
-  graphics::title(ylab = "Total Ion Intensity",   col.lab = col_txt, cex.lab = 1.70, line = 5.0)
+  graphics::title(xlab = "m/z",               col.lab = col_txt, cex.lab = 1.70, line = 3.8)
+  graphics::title(ylab = "Total Ion Intensity", col.lab = col_txt, cex.lab = 1.70, line = 5.0)
 
-  # Orange vertical marker — clipped at actual peak height, never into label headroom
-  graphics::segments(x0 = target_mz, y0 = 0, x1 = target_mz, y1 = int_max,
-                     col = col_mkr, lwd = 1.5, lty = 1)
+  # Orange marker exactly as tall as the target ion, labelled with its m/z
+  t_int <- if (!is.na(target_int) && target_int > 0) target_int else int_max * 0.05
+  graphics::segments(x0 = target_mz, y0 = 0, x1 = target_mz, y1 = t_int,
+                     col = col_mkr, lwd = 2.5, lty = 1)
+  mkr_ch_h <- graphics::strheight("0", cex = 1.44)
+  graphics::text(x = target_mz, y = t_int + mkr_ch_h * 0.3,
+                 labels = sprintf("%.4f", target_mz),
+                 col = col_mkr, cex = 1.44, adj = c(0.5, 0))
 
-  # ── Peak labels: collision-aware placement with angled dotted leader lines ──
+  # ── Peak labels with guide lines ─────────────────────────────────────────
   lbl_cex <- 1.80
   n_top   <- min(n_label, length(mz_w))
   top_idx <- order(int_w, decreasing = TRUE)[seq_len(n_top)]
 
-  # Sort selected peaks by m/z for left-to-right layout
   lbl_mz  <- mz_w[top_idx]
   lbl_int <- int_w[top_idx]
   lbl_txt <- sprintf("%.4f", lbl_mz)
   srt     <- order(lbl_mz)
-  lbl_mz  <- lbl_mz[srt]
-  lbl_int <- lbl_int[srt]
-  lbl_txt <- lbl_txt[srt]
+  lbl_mz  <- lbl_mz[srt]; lbl_int <- lbl_int[srt]; lbl_txt <- lbl_txt[srt]
 
-  ch_w  <- graphics::strwidth("0.0000",  cex = lbl_cex)
-  ch_h  <- graphics::strheight("0.0000", cex = lbl_cex)
-  v_gap <- ch_h * 0.35
+  ch_w <- graphics::strwidth("0.0000",  cex = lbl_cex)
+  ch_h <- graphics::strheight("0.0000", cex = lbl_cex)
 
-  # Label anchor = centre of text box — initially just above each peak tip
-  px <- lbl_mz
-  py <- lbl_int + v_gap + ch_h * 0.5
+  # Lift labels well above peaks so guide lines are always clearly visible
+  lift <- ch_h * 2.0
+  px   <- lbl_mz
+  py   <- lbl_int + lift + ch_h * 0.5
 
-  # Iterative relaxation: spread overlapping label boxes apart in x and y
-  for (pass in seq_len(40L)) {
-    changed <- FALSE
-    for (j in seq_len(length(px) - 1L)) {
-      ox <- ch_w * 1.15 - abs(px[j+1] - px[j])
-      oy <- ch_h * 1.15 - abs(py[j+1] - py[j])
-      if (ox > 0 && oy > 0) {
-        # Nudge horizontally to produce angled leader lines
-        push_x <- ox * 0.45
-        if (px[j+1] >= px[j]) {
-          px[j]   <- px[j]   - push_x
-          px[j+1] <- px[j+1] + push_x
-        } else {
-          px[j]   <- px[j]   + push_x
-          px[j+1] <- px[j+1] - push_x
+  # Vertical relaxation: push horizontally-close labels apart upward
+  for (pass in seq_len(60L)) {
+    moved <- FALSE
+    for (j in seq_len(length(py) - 1L)) {
+      if (abs(px[j+1] - px[j]) < ch_w * 1.1) {
+        overlap <- (py[j] + ch_h * 0.5) - (py[j+1] - ch_h * 0.5)
+        if (overlap > 0) {
+          py[j]   <- py[j]   - overlap * 0.4
+          py[j+1] <- py[j+1] + overlap * 0.6
+          moved <- TRUE
         }
-        # Nudge higher label further upward
-        py[j+1] <- py[j+1] + oy * 0.6
-        changed <- TRUE
       }
     }
-    if (!changed) break
+    if (!moved) break
   }
+  # Never let a label drop below its own minimum lift
+  py <- pmax(py, lbl_int + lift + ch_h * 0.5)
   py <- pmin(py, y_top - ch_h * 0.6)
 
-  # Dotted angled leader lines — drawn for every peak label
-  col_lead <- adjustcolor(col_txt, alpha.f = 0.5)
-  for (j in seq_along(px)) {
-    lbl_bot <- py[j] - ch_h * 0.5
-    tip_y   <- lbl_int[j]
-    graphics::segments(x0 = lbl_mz[j], y0 = tip_y,
-                       x1 = px[j],     y1 = lbl_bot - v_gap * 0.3,
-                       col = col_lead, lwd = 1.5, lty = 3)
+  # Horizontal nudge for close labels — angle the guide lines
+  for (j in seq_len(length(px) - 1L)) {
+    gap_x <- abs(px[j+1] - px[j])
+    if (gap_x < ch_w * 1.1) {
+      nudge <- (ch_w * 1.1 - gap_x) * 0.5
+      px[j]   <- px[j]   - nudge
+      px[j+1] <- px[j+1] + nudge
+    }
   }
 
-  graphics::text(px, py, labels = lbl_txt, col = col_lbl,
-                 cex = lbl_cex, adj = c(0.5, 0.5))
+  # Guide lines: from peak tip to just below each label (always drawn, always visible)
+  for (j in seq_along(px)) {
+    graphics::segments(x0 = lbl_mz[j], y0 = lbl_int[j],
+                       x1 = px[j],     y1 = py[j] - ch_h * 0.6,
+                       col = col_lead, lwd = 2.0, lty = 2)
+  }
+
+  graphics::text(px, py, labels = lbl_txt, col = col_lbl, cex = lbl_cex, adj = c(0.5, 0.5))
 
   invisible(NULL)
 }
