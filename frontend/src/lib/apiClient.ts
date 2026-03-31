@@ -3,6 +3,7 @@ import { supabase } from './supabaseClient'
 
 const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '',
+  timeout: 10000, // 10 s — fail fast if the backend is unreachable
 })
 
 // Attach Supabase JWT to every request
