@@ -14,6 +14,8 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
+          retry_count: 3
+          connect_timeout: 30s
           script: |
             set -e
             cd ~/PeakMe
