@@ -15,8 +15,12 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
+            set -e
             cd ~/PeakMe
             git pull origin main
             docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
             docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T api alembic upgrade head
             docker image prune -f
+            # Verify the API is healthy after deploy
+            sleep 5
+            curl -sf http://localhost:8000/health || (echo "Health check failed" && exit 1)
