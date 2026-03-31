@@ -19,7 +19,7 @@ export default function ProjectsPage() {
   const [editingName, setEditingName] = useState('')
   const profileRef = useRef<HTMLDivElement>(null)
 
-  const { data: projects, isLoading, isError } = useQuery<Project[]>({
+  const { data: projects, isLoading, isError, error } = useQuery<Project[], Error>({
     queryKey: ['projects'],
     queryFn: () => apiClient.get('/api/projects').then((r) => r.data),
   })
@@ -193,8 +193,19 @@ export default function ProjectsPage() {
             ))}
           </div>
         ) : isError ? (
-          <div className="rounded-xl bg-gray-900 p-10 text-center text-red-400">
-            Failed to load projects. Check your connection and try refreshing.
+          <div className="rounded-xl bg-gray-900 p-10 text-center space-y-2">
+            <p className="text-red-400 font-medium">Failed to load projects.</p>
+            <p className="text-xs text-gray-500">
+              {(error as any)?.response?.status
+                ? `HTTP ${(error as any).response.status}: ${(error as any).response.data?.detail ?? 'unknown error'}`
+                : error?.message ?? 'Network error — check your connection.'}
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              className="mt-2 rounded-lg bg-gray-700 px-4 py-1.5 text-xs text-gray-300 hover:bg-gray-600 transition-colors"
+            >
+              Retry
+            </button>
           </div>
         ) : projects?.length === 0 ? (
           <div className="rounded-xl bg-gray-900 p-10 text-center text-gray-500">

@@ -90,6 +90,13 @@ async def get_current_user(
             raise credentials_exception
     except JWTError:
         raise credentials_exception
+    except Exception as exc:
+        # Catches httpx errors (JWKS unreachable), malformed tokens, etc.
+        # Convert to 401 so the frontend surfaces a clear auth failure rather
+        # than a confusing 500.
+        import logging
+        logging.getLogger(__name__).error("Token verification failed: %s", exc)
+        raise credentials_exception
 
     uid = uuid.UUID(user_id)
     result = await db.execute(select(User).where(User.id == uid))
