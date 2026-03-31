@@ -44,7 +44,9 @@ specific new rule to this file in the same commit** so it doesn't recur.
 
 After every non-trivial change, ask yourself:
 
-1. **CHANGELOG.md** — Add an entry under `## Unreleased` for every user-facing change.
+1. **CHANGELOG.md** — Add an entry under a `## YYYY-MM-DD` date section (today's date)
+   for every user-facing change. Do NOT use `## Unreleased` — PeakMe ships continuously
+   so every change belongs to the date it was made.
    Format: `- TYPE: short description (#context if relevant)`
    Types: `feat`, `fix`, `perf`, `breaking`
    Do this as part of the same commit as the code change.
