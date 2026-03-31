@@ -22,8 +22,12 @@ function App() {
     return () => subscription.unsubscribe()
   }, [])
 
-  // Still loading auth state
-  if (user === undefined) {
+  // Still loading auth state, OR an OAuth code exchange is in progress.
+  // Keep showing the spinner until onAuthStateChange fires — prevents React
+  // Router from navigating away and stripping the ?code= query param before
+  // Supabase can complete the PKCE token exchange.
+  const hasOAuthCode = new URLSearchParams(window.location.search).has('code')
+  if (user === undefined || (user === null && hasOAuthCode)) {
     return (
       <div className="flex h-screen items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />

@@ -95,11 +95,22 @@ async def get_current_user(
     result = await db.execute(select(User).where(User.id == uid))
     user = result.scalar_one_or_none()
 
+    if user is None and email:
+        # Fallback: look up by email to handle the case where the same person
+        # has signed in before via a different auth method (e.g. email OTP then
+        # Google OAuth).  Supabase may issue a different UUID for each method
+        # unless account-linking is enabled, which would otherwise cause a
+        # unique-email constraint violation on INSERT.
+        result = await db.execute(select(User).where(User.email == email))
+        user = result.scalar_one_or_none()
+
     if user is None:
-        # First login: auto-create user record from JWT claims.
+        # Genuinely new user — auto-create record from JWT claims.
         # Full sync (POST /api/auth/sync) allows updating display_name later.
         display_name = (
-            payload.get("user_metadata", {}).get("display_name") or email.split("@")[0]
+            payload.get("user_metadata", {}).get("full_name")
+            or payload.get("user_metadata", {}).get("display_name")
+            or email.split("@")[0]
         )
         user = User(id=uid, email=email, display_name=display_name)
         db.add(user)
