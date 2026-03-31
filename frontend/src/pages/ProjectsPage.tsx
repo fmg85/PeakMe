@@ -19,7 +19,7 @@ export default function ProjectsPage() {
   const [editingName, setEditingName] = useState('')
   const profileRef = useRef<HTMLDivElement>(null)
 
-  const { data: projects, isLoading } = useQuery<Project[]>({
+  const { data: projects, isLoading, isError } = useQuery<Project[]>({
     queryKey: ['projects'],
     queryFn: () => apiClient.get('/api/projects').then((r) => r.data),
   })
@@ -191,6 +191,10 @@ export default function ProjectsPage() {
             {[1, 2, 3].map((i) => (
               <div key={i} className="h-20 animate-pulse rounded-xl bg-gray-900" />
             ))}
+          </div>
+        ) : isError ? (
+          <div className="rounded-xl bg-gray-900 p-10 text-center text-red-400">
+            Failed to load projects. Check your connection and try refreshing.
           </div>
         ) : projects?.length === 0 ? (
           <div className="rounded-xl bg-gray-900 p-10 text-center text-gray-500">
