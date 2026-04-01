@@ -40,6 +40,7 @@ export default function AnnotatePage() {
   const [labelFilter, setLabelFilter] = useState<string | null>(null)
   const [sessionStarted, setSessionStarted] = useState(false)
   const [sessionAnnotations, setSessionAnnotations] = useState(0)
+  const [sessionReviewed, setSessionReviewed] = useState(0)  // increments on ALL annotations incl. re-annotations
   // Snapshot of my_annotation_count at the moment the user clicks Resume/Start.
   // We freeze it here so that React Query background refetches mid-session
   // can't corrupt the counter (if my_annotation_count updated to include session
@@ -101,6 +102,7 @@ export default function AnnotatePage() {
     try {
       await apiClient.post(`/api/ions/${snapshot.id}/annotate`, { label_option_id: label.id })
       setUndoStack((s) => [...s, snapshot])
+      setSessionReviewed((n) => n + 1)
       if (!wasAlreadyAnnotated) setSessionAnnotations((n) => n + 1)
     } catch {
       setAnim(null)
@@ -120,6 +122,7 @@ export default function AnnotatePage() {
     const item = undoStack[undoStack.length - 1]
     setUndoStack((s) => s.slice(0, -1))
     setSessionAnnotations((n) => Math.max(0, n - 1))
+    setSessionReviewed((n) => Math.max(0, n - 1))
     await apiClient.delete(`/api/ions/${item.id}/annotate`)
     // Prepend the undone ion back to the front of the queue (no reload needed).
     // This always lands on exactly the ion that was undone, regardless of strategy.
@@ -227,6 +230,11 @@ export default function AnnotatePage() {
     }
   }, [exhausted, sessionStarted, queryClient, datasetId])
   const progress = total > 0 ? Math.round((annotated / total) * 100) : 0
+  // For re-annotation passes the overall progress bar is meaningless (stuck at 100%).
+  // Use sessionReviewed to show how far through the current pass the user is instead.
+  const reviewProgress = (strategy !== 'unannotated_first' || labelFilter)
+    ? (total > 0 ? Math.round((sessionReviewed / total) * 100) : 0)
+    : progress
 
   // Derived drag values
   const [dx, dy] = dragXY
@@ -383,14 +391,14 @@ export default function AnnotatePage() {
                     const color = project?.label_options.find((l) => l.name === labelFilter)?.color
                     return <span className="flex items-center justify-center gap-1">
                       {color && <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: color }} />}
-                      Reviewing: {labelFilter} · {sessionAnnotations.toLocaleString()} done
+                      Reviewing: {labelFilter} · {sessionReviewed.toLocaleString()} done
                     </span>
                   })()
                 : strategy === 'unannotated_first'
                 ? `${annotated.toLocaleString()} / ${total.toLocaleString()} annotated${remaining_unannotated > 0 ? ` · ${remaining_unannotated.toLocaleString()} left` : ''}`
                 : strategy === 'all'
-                ? `Reviewing all · ${sessionAnnotations.toLocaleString()} / ${total.toLocaleString()}`
-                : `Starred · ${sessionAnnotations.toLocaleString()} reviewed`}
+                ? `Reviewing all · ${sessionReviewed.toLocaleString()} / ${total.toLocaleString()}`
+                : `Starred · ${sessionReviewed.toLocaleString()} reviewed`}
             </p>
           )}
         </div>
@@ -401,7 +409,7 @@ export default function AnnotatePage() {
 
       {/* Progress bar */}
       <div className="h-1 bg-gray-800 flex-shrink-0">
-        <div className="h-1 bg-brand-orange transition-all duration-500" style={{ width: `${progress}%` }} />
+        <div className="h-1 bg-brand-orange transition-all duration-500" style={{ width: `${reviewProgress}%` }} />
       </div>
 
       {/* Main content */}
