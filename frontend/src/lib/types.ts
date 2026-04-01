@@ -64,14 +64,28 @@ export interface DatasetLabelSummary {
   labels: Array<{ label_name: string; count: number; pct: number }>
 }
 
+export interface LabelCount {
+  label_name: string
+  count: number
+}
+
 export interface StatsOut {
   total_ions: number
+  total_annotated_ions: number
   total_annotations: number
   unique_annotators: number
+  label_distribution: LabelCount[]
   per_user: Array<{
     user_id: string
     display_name: string
     annotation_count: number
-    label_breakdown: Array<{ label_name: string; count: number }>
+    label_breakdown: LabelCount[]
   }>
+}
+
+export interface GlobalStatsOut {
+  total_ions: number
+  total_annotations: number
+  unique_annotators: number
+  label_distribution: LabelCount[]
 }

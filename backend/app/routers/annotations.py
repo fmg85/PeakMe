@@ -17,7 +17,7 @@ from app.models.ion import Ion
 from app.models.project import Project
 from app.models.star import IonStar
 from app.models.user import User
-from app.schemas.annotation import LabelCount, StatsOut, UserStats
+from app.schemas.annotation import GlobalStatsOut, LabelCount, StatsOut, UserStats
 
 router = APIRouter(prefix="/api/projects", tags=["annotations"])
 
@@ -216,8 +216,11 @@ async def get_stats(
 
     total_annotations = len(rows)
     user_map: dict[uuid.UUID, dict] = {}
+    global_labels: dict[str, int] = {}
+    annotated_ions: set[uuid.UUID] = set()
 
     for annotation, user in rows:
+        annotated_ions.add(annotation.ion_id)
         if user.id not in user_map:
             user_map[user.id] = {
                 "user_id": user.id,
@@ -228,22 +231,72 @@ async def get_stats(
         user_map[user.id]["count"] += 1
         label = annotation.label_name
         user_map[user.id]["labels"][label] = user_map[user.id]["labels"].get(label, 0) + 1
+        global_labels[label] = global_labels.get(label, 0) + 1
 
-    per_user = [
-        UserStats(
-            user_id=v["user_id"],
-            display_name=v["display_name"],
-            annotation_count=v["count"],
-            label_breakdown=[
-                LabelCount(label_name=k, count=c) for k, c in sorted(v["labels"].items())
-            ],
-        )
-        for v in user_map.values()
-    ]
+    per_user = sorted(
+        [
+            UserStats(
+                user_id=v["user_id"],
+                display_name=v["display_name"],
+                annotation_count=v["count"],
+                label_breakdown=[
+                    LabelCount(label_name=k, count=c) for k, c in sorted(v["labels"].items())
+                ],
+            )
+            for v in user_map.values()
+        ],
+        key=lambda u: u.annotation_count,
+        reverse=True,
+    )
 
     return StatsOut(
         total_ions=total_ions,
+        total_annotated_ions=len(annotated_ions),
         total_annotations=total_annotations,
         unique_annotators=len(user_map),
+        label_distribution=[
+            LabelCount(label_name=k, count=c) for k, c in sorted(global_labels.items())
+        ],
         per_user=per_user,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Global stats — cross-project, all users
+# ---------------------------------------------------------------------------
+
+global_router = APIRouter(prefix="/api/stats", tags=["stats"])
+
+
+@global_router.get("", response_model=GlobalStatsOut)
+async def get_global_stats(
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    """Aggregate stats across all projects and all users."""
+    total_ions_result = await db.execute(select(func.count(Ion.id)))
+    total_ions = total_ions_result.scalar() or 0
+
+    rows = await db.execute(
+        select(Annotation.label_name, func.count(Annotation.id), func.count(func.distinct(Annotation.user_id)))
+        .group_by(Annotation.label_name)
+    )
+    label_rows = rows.all()
+
+    label_distribution = [
+        LabelCount(label_name=label, count=count)
+        for label, count, _ in sorted(label_rows, key=lambda r: r[0])
+    ]
+    total_annotations = sum(r[1] for r in label_rows)
+
+    annotator_result = await db.execute(
+        select(func.count(func.distinct(Annotation.user_id)))
+    )
+    unique_annotators = annotator_result.scalar() or 0
+
+    return GlobalStatsOut(
+        total_ions=total_ions,
+        total_annotations=total_annotations,
+        unique_annotators=unique_annotators,
+        label_distribution=label_distribution,
     )

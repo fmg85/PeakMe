@@ -38,6 +38,15 @@ class UserStats(BaseModel):
 
 class StatsOut(BaseModel):
     total_ions: int
+    total_annotated_ions: int
     total_annotations: int
     unique_annotators: int
+    label_distribution: list[LabelCount]
     per_user: list[UserStats]
+
+
+class GlobalStatsOut(BaseModel):
+    total_ions: int
+    total_annotations: int
+    unique_annotators: int
+    label_distribution: list[LabelCount]
