@@ -7,6 +7,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## 2026-04-01
 
+- fix: display name now synced from Google JWT (full_name) on login when the stored name is still the auto-generated email prefix
 - feat: stats page redesign — completion hero with progress bar and % complete, full-width label distribution stacked bar with colour-coded legend, per-annotator cards showing % of total ions, new PeakMe Community section with cross-project global stats
 - feat: new `GET /api/stats` global endpoint returning platform-wide ion count, annotation count, unique annotators, and label distribution
 - feat: `StatsOut` extended with `total_annotated_ions` and `label_distribution` fields

@@ -110,6 +110,19 @@ async def get_current_user(
         # unique-email constraint violation on INSERT.
         result = await db.execute(select(User).where(User.email == email))
         user = result.scalar_one_or_none()
+        if user is not None:
+            # Sync display_name from the latest JWT user_metadata (e.g. Google
+            # full_name) if the stored name still looks auto-generated (email
+            # prefix) and the JWT carries a richer name.
+            jwt_name = (
+                payload.get("user_metadata", {}).get("full_name")
+                or payload.get("user_metadata", {}).get("display_name")
+            )
+            if jwt_name and user.display_name == email.split("@")[0]:
+                user.display_name = jwt_name
+                db.add(user)
+                await db.commit()
+                await db.refresh(user)
 
     if user is None:
         # Genuinely new user — auto-create record from JWT claims.
