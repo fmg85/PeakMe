@@ -176,6 +176,13 @@ workflow exits with an error — check the Actions log.
 > secrets (AWS keys, Supabase JWT secret), SSH into EC2 and update `.env` manually,
 > then run `docker compose restart api`.
 
+The workflow also runs on a **nightly schedule (03:00 UTC)** as a catch-up mechanism:
+if a push-triggered deploy failed (e.g. during an EC2 reboot), the server will
+self-heal within 24 hours. It skips the rebuild if EC2 is already on the latest commit.
+
+To trigger a deploy immediately without pushing a commit, go to:
+**GitHub → Actions → Deploy to EC2 → Run workflow**.
+
 ## 12. Update PeakMe
 
 Once GitHub Actions is configured (step 10), deployments are fully automated:

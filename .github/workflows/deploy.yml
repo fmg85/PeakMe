@@ -3,6 +3,12 @@ name: Deploy to EC2
 on:
   push:
     branches: [main]
+  # Nightly catch-up: re-deploys if EC2 fell behind while push-triggered deploys
+  # were failing (e.g. during an EC2 reboot window). Runs at 03:00 UTC daily.
+  schedule:
+    - cron: '0 3 * * *'
+  # Manual trigger from GitHub Actions UI — use this to redeploy without a dummy commit.
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -19,10 +25,18 @@ jobs:
           script: |
             set -e
             cd ~/PeakMe
-            git pull origin main
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T api alembic upgrade head
-            docker image prune -f
-            # Verify the API is healthy after deploy
-            sleep 5
-            curl -sf http://localhost:8000/health || (echo "Health check failed" && exit 1)
+            git fetch origin main
+            BEHIND=$(git rev-list HEAD..origin/main --count)
+            if [ "$BEHIND" -gt 0 ]; then
+              echo "EC2 is $BEHIND commit(s) behind — deploying..."
+              git pull origin main
+              docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+              docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T api alembic upgrade head
+              docker image prune -f
+              sleep 5
+              curl -sf http://localhost:8000/health || (echo "Health check failed" && exit 1)
+            else
+              echo "EC2 is up to date ($(git rev-parse --short HEAD)) — skipping rebuild"
+              # Still verify health even if no deploy was needed
+              curl -sf http://localhost:8000/health || (echo "Health check failed" && exit 1)
+            fi
