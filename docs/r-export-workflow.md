@@ -14,7 +14,7 @@ PeakMe does not process raw mass spectrometry files server-side. Instead, you re
 
 **Steps:**
 1. Install R dependencies
-2. Run `peakme_export.R` on your data
+2. Run `peakme_import.R` on your data
 3. Zip the output folder
 4. Upload the ZIP to PeakMe and create a dataset
 
@@ -36,7 +36,7 @@ install.packages(c("viridis", "optparse", "png"))
 
 ### 2. Run the PeakMe Import Script
 
-Download `peakme_export.R` from the PeakMe instructions page (↓ PeakMe Import button).
+Download `peakme_import.R` from the PeakMe instructions page (↓ PeakMe Import button).
 
 #### Option A: RStudio (interactive)
 

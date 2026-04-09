@@ -59,7 +59,8 @@ After every non-trivial change, ask yourself:
 4. **`docs/deployment.md`** — Update if deployment process, env vars, or infra changes.
 
 5. **`docs/adr/`** — Create a new ADR (`ADR-00N-title.md`) when making a significant
-   architectural decision. Copy the format from an existing ADR.
+   architectural decision. Copy the format from an existing ADR. Decisions that need ADRs:
+   auth/JWT changes, new API endpoint patterns, security mitigations, data model changes.
 
 6. **`README.md`** (root, if it exists) — Keep the top-level overview current.
 
