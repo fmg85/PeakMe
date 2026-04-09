@@ -69,7 +69,7 @@ cd PeakMe
 
 # Configure environment
 cp .env.example .env
-nano .env  # fill in all values
+nano .env  # fill in all values — see .env.example for descriptions of each variable
 ```
 
 Update `nginx/nginx.conf` — replace `YOUR_DOMAIN` with your actual domain:
@@ -129,22 +129,59 @@ curl https://api.yourdomain.com/health
    > the bundle and bypasses the proxy.
 6. Deploy
 
-After deployment, copy your Vercel URL (e.g. `https://peakme.vercel.app`) and:
+After deployment, copy your Vercel URL (e.g. `https://your-project.vercel.app`) and:
 - Add it to `ALLOWED_ORIGINS` in EC2's `.env`, then restart: `docker compose restart api`
 - Add it to Supabase → Authentication → URL Configuration → Redirect URLs
 
+> **ALLOWED_ORIGINS chicken-and-egg:** During initial EC2 setup (step 4) you don't have
+> a Vercel URL yet. Set `ALLOWED_ORIGINS=http://localhost:5173` as a placeholder, then
+> update it after Vercel deploys. Until updated, the deployed frontend will get CORS
+> errors — but the API and health check will work for testing.
+
 ## 9. Renew SSL Certificate (Automatic)
+
+> This cron job references `/home/ubuntu/PeakMe/`. If your deploy user or repo path
+> differs, update the path accordingly before running.
 
 Create a cron job to auto-renew:
 ```bash
 (crontab -l 2>/dev/null; echo "0 3 * * * certbot renew --quiet && docker compose -f /home/ubuntu/PeakMe/docker-compose.yml -f /home/ubuntu/PeakMe/docker-compose.prod.yml restart nginx") | crontab -
 ```
 
-## 10. Update PeakMe
+## 10. Configure GitHub Actions (Automated Deploy)
 
-Deployments are automated via GitHub Actions on every push to `main`:
-- EC2: SSH deploy, Docker rebuild, `alembic upgrade head` (migrations run automatically)
-- Vercel: auto-deploys frontend on push to `main`
+Deployments are automated via GitHub Actions on every push to `main`.
+You must add three secrets to the GitHub repository before this works:
+
+1. Go to your GitHub repository → **Settings → Secrets and variables → Actions → New repository secret**
+2. Add each secret:
+
+| Secret name | Value |
+|---|---|
+| `EC2_HOST` | Your EC2 public IP or domain (e.g. `api.yourdomain.com`) |
+| `EC2_USER` | `ubuntu` (the default SSH user for Ubuntu AMIs) |
+| `EC2_SSH_KEY` | The full contents of your `.pem` private key file |
+
+To copy your `.pem` key contents:
+```bash
+cat your-key.pem
+# Paste everything including -----BEGIN RSA PRIVATE KEY----- and -----END-----
+```
+
+Once set, every push to `main` will SSH into EC2, rebuild the Docker containers, run
+`alembic upgrade head`, and verify with a health check. If the health check fails, the
+workflow exits with an error — check the Actions log.
+
+> **Note:** The `.env` file on EC2 is **not** managed by GitHub Actions. If you rotate
+> secrets (AWS keys, Supabase JWT secret), SSH into EC2 and update `.env` manually,
+> then run `docker compose restart api`.
+
+## 12. Update PeakMe
+
+Once GitHub Actions is configured (step 10), deployments are fully automated:
+- **EC2:** SSH deploy, Docker rebuild, `alembic upgrade head`
+- **Vercel:** auto-deploys frontend on every push to `main` (Vercel webhook is set up
+  automatically when you import the GitHub repo in step 8)
 
 To deploy manually:
 ```bash
@@ -154,7 +191,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T api alembic upgrade head
 ```
 
-## Monitoring
+## 13. Monitoring
 
 ```bash
 # View API logs
@@ -167,14 +204,14 @@ docker compose ps
 docker stats
 ```
 
-## Backup
+## 14. Backup
 
 The database lives on Supabase — they handle backups (Point-in-Time Recovery on Pro plan).
 Ion images live on S3 — enable S3 Versioning for protection against accidental deletion.
 
 There is no data on the EC2 instance itself that needs backing up.
 
-## Migrating from Vercel to Docker-only (if needed)
+## 15. Migrating from Vercel to Docker-only (if needed)
 
 If you ever want to stop using Vercel and serve the frontend from EC2:
 
