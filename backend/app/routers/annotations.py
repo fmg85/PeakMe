@@ -55,6 +55,9 @@ async def export_annotations(
     if format == "csv":
         output = io.StringIO()
         writer = csv.writer(output)
+        # mz_value MUST stay in this export — it is the canonical key used by
+        # peakme_export.R to match annotations back to Cardinal features (ADR-010).
+        # Never replace it with sort_order or truncate its precision.
         writer.writerow([
             "ion_id", "dataset_id", "mz_value", "label_name",
             "label_option_id", "starred", "annotator", "annotator_id",
