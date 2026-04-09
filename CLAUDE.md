@@ -66,6 +66,10 @@ After every non-trivial change, ask yourself:
 
 The rule: **if you changed it, document it in the same commit.**
 
+These rules are enforced by CI (`.github/workflows/check-docs.yml`):
+- Pushing source changes without a CHANGELOG entry fails the build.
+- Pushing R script changes without updating both `docs/r-export-workflow.md` and `InstructionsPage.tsx` fails the build.
+
 ## Commit conventions
 
 Use conventional commits — this feeds the CHANGELOG and makes git history readable:

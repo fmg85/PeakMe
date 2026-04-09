@@ -1,0 +1,76 @@
+name: Documentation Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  changelog:
+    name: CHANGELOG updated
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fail if source changed without CHANGELOG entry
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
+          else
+            CHANGED=$(git diff --name-only HEAD~1 HEAD)
+          fi
+
+          SOURCE=$(echo "$CHANGED" | grep -E '^(backend|frontend/src|r-scripts).*\.(py|tsx?|R)$' || true)
+          CHANGELOG=$(echo "$CHANGED" | grep '^CHANGELOG\.md$' || true)
+
+          if [ -n "$SOURCE" ] && [ -z "$CHANGELOG" ]; then
+            echo "CHANGELOG.md was not updated."
+            echo ""
+            echo "Changed source files:"
+            echo "$SOURCE"
+            echo ""
+            echo "Add an entry under ## $(date +%Y-%m-%d) in CHANGELOG.md and recommit."
+            exit 1
+          fi
+
+          echo "OK"
+
+  r-script-sync:
+    name: R script docs in sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fail if R scripts changed without updating workflow doc + InstructionsPage
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
+          else
+            CHANGED=$(git diff --name-only HEAD~1 HEAD)
+          fi
+
+          R_CHANGED=$(echo "$CHANGED" | grep '^r-scripts/.*\.R$' || true)
+
+          if [ -z "$R_CHANGED" ]; then
+            echo "No R script changes — skipping"
+            exit 0
+          fi
+
+          MISSING=""
+          echo "$CHANGED" | grep -q '^docs/r-export-workflow\.md$' || MISSING="$MISSING\n  - docs/r-export-workflow.md"
+          echo "$CHANGED" | grep -q '^frontend/src/pages/InstructionsPage\.tsx$' || MISSING="$MISSING\n  - frontend/src/pages/InstructionsPage.tsx"
+
+          if [ -n "$MISSING" ]; then
+            echo "R scripts changed but these files were not updated:"
+            printf "$MISSING\n"
+            echo ""
+            echo "Per CLAUDE.md: both docs must stay in sync with R script changes."
+            exit 1
+          fi
+
+          echo "OK"
