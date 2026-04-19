@@ -7,16 +7,14 @@ BUCKET="peakme-ions"
 REGION="us-west-1"
 RESULTS_DIR="/home/ubuntu/research_results"
 DATA_DIR="/home/ubuntu/research_data"
+PYTHON=/opt/pytorch/bin/python
+PIP=/opt/pytorch/bin/pip
 
 echo "=== PeakMe Research — Phases 1-2 ==="
 date
 
-echo "--- Activating conda env ---"
-source /opt/conda/etc/profile.d/conda.sh
-conda activate pytorch
-
-echo "--- Installing deps ---"
-pip install -q scikit-image scikit-learn scipy Pillow boto3 pandas matplotlib seaborn
+echo "--- Installing missing deps ---"
+$PIP install -q scikit-image
 
 echo "--- Cloning/updating repo ---"
 if [ ! -d /home/ubuntu/PeakMe ]; then
@@ -33,12 +31,12 @@ aws s3 cp "s3://$BUCKET/research/annotations.csv" "$DATA_DIR/annotations.csv" --
 echo "Rows: $(wc -l < "$DATA_DIR/annotations.csv")"
 
 echo "--- Phase 1: Data Audit ---"
-python /home/ubuntu/PeakMe/research/scripts/01_data_audit.py \
+$PYTHON /home/ubuntu/PeakMe/research/scripts/01_data_audit.py \
     --csv "$DATA_DIR/annotations.csv" \
     --out "$RESULTS_DIR"
 
 echo "--- Phase 2: Image Statistics ---"
-python /home/ubuntu/PeakMe/research/scripts/02_image_statistics.py \
+$PYTHON /home/ubuntu/PeakMe/research/scripts/02_image_statistics.py \
     --csv "$DATA_DIR/annotations.csv" \
     --bucket "$BUCKET" \
     --region "$REGION" \

@@ -1,0 +1,314 @@
+{
+  "total_rows": 35084,
+  "annotated": 35084,
+  "unannotated": 0,
+  "unique_datasets": 6,
+  "unique_projects": 2,
+  "projects": {
+    "65DNeoInfM3_10_test": {
+      "total_ions": 5072,
+      "annotated_ions": 5072,
+      "datasets": {
+        "65D_m3_sl10": 5072
+      },
+      "label_counts": {
+        "off_tissue": 2502,
+        "on_tissue": 2496,
+        "unclear": 74
+      },
+      "label_pct": {
+        "off_tissue": 49.33,
+        "on_tissue": 49.21,
+        "unclear": 1.46
+      }
+    },
+    "GCPL": {
+      "total_ions": 30012,
+      "annotated_ions": 30012,
+      "datasets": {
+        "gpcl551_2a_2": 4846,
+        "gpcl611_2a_2": 8966,
+        "gpcl852_2a_2": 6657,
+        "gpcl858_2a_2": 3602,
+        "gpcl968_2a_2": 5941
+      },
+      "label_counts": {
+        "off_tissue": 25395,
+        "on_tissue": 4511,
+        "unclear": 106
+      },
+      "label_pct": {
+        "off_tissue": 84.62,
+        "on_tissue": 15.03,
+        "unclear": 0.35
+      }
+    }
+  },
+  "cross_organism_mz_overlap": {
+    "human_unique_mz": 17376,
+    "mouse_unique_mz": 5072,
+    "shared_mz_1mda": 1470,
+    "pct_overlap_human": 8.46,
+    "pct_overlap_mouse": 28.98
+  },
+  "dhap_artefact_candidates_top50": [
+    {
+      "mz_r": 254.0854,
+      "n_datasets_off_tissue": 4,
+      "pct_datasets": 66.7
+    },
+    {
+      "mz_r": 254.0586,
+      "n_datasets_off_tissue": 4,
+      "pct_datasets": 66.7
+    },
+    {
+      "mz_r": 324.0935,
+      "n_datasets_off_tissue": 4,
+      "pct_datasets": 66.7
+    },
+    {
+      "mz_r": 310.0788,
+      "n_datasets_off_tissue": 4,
+      "pct_datasets": 66.7
+    },
+    {
+      "mz_r": 329.0408,
+      "n_datasets_off_tissue": 4,
+      "pct_datasets": 66.7
+    },
+    {
+      "mz_r": 263.0834,
+      "n_datasets_off_tissue": 4,
+      "pct_datasets": 66.7
+    },
+    {
+      "mz_r": 330.0633,
+      "n_datasets_off_tissue": 4,
+      "pct_datasets": 66.7
+    },
+    {
+      "mz_r": 306.0813,
+      "n_datasets_off_tissue": 4,
+      "pct_datasets": 66.7
+    },
+    {
+      "mz_r": 296.0969,
+      "n_datasets_off_tissue": 4,
+      "pct_datasets": 66.7
+    },
+    {
+      "mz_r": 301.0721,
+      "n_datasets_off_tissue": 3,
+      "pct_datasets": 50.0
+    },
+    {
+      "mz_r": 331.0756,
+      "n_datasets_off_tissue": 3,
+      "pct_datasets": 50.0
+    },
+    {
+      "mz_r": 331.0905,
+      "n_datasets_off_tissue": 3,
+      "pct_datasets": 50.0
+    },
+    {
+      "mz_r": 347.0525,
+      "n_datasets_off_tissue": 3,
+      "pct_datasets": 50.0
+    },
+    {
+      "mz_r": 347.058,
+      "n_datasets_off_tissue": 3,
+      "pct_datasets": 50.0
+    },
+    {
+      "mz_r": 599.3081,
+      "n_datasets_off_tissue": 3,
+      "pct_datasets": 50.0
+    },
+    {
+      "mz_r": 347.0774,
+      "n_datasets_off_tissue": 3,
+      "pct_datasets": 50.0
+    },
+    {
+      "mz_r": 347.0835,
+      "n_datasets_off_tissue": 3,
+      "pct_datasets": 50.0
+    },
+    {
+      "mz_r": 256.2133,
+      "n_datasets_off_tissue": 3,
+      "pct_datasets": 50.0
+    },
+    {
+      "mz_r": 507.2889,
+      "n_datasets_off_tissue": 3,
+      "pct_datasets": 50.0
+    },
+    {
+      "mz_r": 447.2475,
+      "n_datasets_off_tissue": 3,
+      "pct_datasets": 50.0
+    },
+    {
+      "mz_r": 346.0594,
+      "n_datasets_off_tissue": 3,
+      "pct_datasets": 50.0
+    },
+    {
+      "mz_r": 346.0699,
+      "n_datasets_off_tissue": 3,
+      "pct_datasets": 50.0
+    },
+    {
+      "mz_r": 504.2619,
+      "n_datasets_off_tissue": 3,
+      "pct_datasets": 50.0
+    },
+    {
+      "mz_r": 346.084,
+      "n_datasets_off_tissue": 3,
+      "pct_datasets": 50.0
+    },
+    {
+      "mz_r": 589.3587,
+      "n_datasets_off_tissue": 3,
+      "pct_datasets": 50.0
+    },
+    {
+      "mz_r": 331.0502,
+      "n_datasets_off_tissue": 3,
+      "pct_datasets": 50.0
+    },
+    {
+      "mz_r": 407.2769,
+      "n_datasets_off_tissue": 3,
+      "pct_datasets": 50.0
+    },
+    {
+      "mz_r": 331.0453,
+      "n_datasets_off_tissue": 3,
+      "pct_datasets": 50.0
+    },
+    {
+      "mz_r": 347.0939,
+      "n_datasets_off_tissue": 3,
+      "pct_datasets": 50.0
+    },
+    {
+      "mz_r": 331.0649,
+      "n_datasets_off_tissue": 3,
+      "pct_datasets": 50.0
+    },
+    {
+      "mz_r": 301.0501,
+      "n_datasets_off_tissue": 3,
+      "pct_datasets": 50.0
+    },
+    {
+      "mz_r": 348.0899,
+      "n_datasets_off_tissue": 3,
+      "pct_datasets": 50.0
+    },
+    {
+      "mz_r": 268.2153,
+      "n_datasets_off_tissue": 3,
+      "pct_datasets": 50.0
+    },
+    {
+      "mz_r": 337.0678,
+      "n_datasets_off_tissue": 3,
+      "pct_datasets": 50.0
+    },
+    {
+      "mz_r": 349.0084,
+      "n_datasets_off_tissue": 3,
+      "pct_datasets": 50.0
+    },
+    {
+      "mz_r": 305.0678,
+      "n_datasets_off_tissue": 3,
+      "pct_datasets": 50.0
+    },
+    {
+      "mz_r": 349.0727,
+      "n_datasets_off_tissue": 3,
+      "pct_datasets": 50.0
+    },
+    {
+      "mz_r": 305.096,
+      "n_datasets_off_tissue": 3,
+      "pct_datasets": 50.0
+    },
+    {
+      "mz_r": 306.0745,
+      "n_datasets_off_tissue": 3,
+      "pct_datasets": 50.0
+    },
+    {
+      "mz_r": 346.0541,
+      "n_datasets_off_tissue": 3,
+      "pct_datasets": 50.0
+    },
+    {
+      "mz_r": 269.1062,
+      "n_datasets_off_tissue": 3,
+      "pct_datasets": 50.0
+    },
+    {
+      "mz_r": 574.2881,
+      "n_datasets_off_tissue": 3,
+      "pct_datasets": 50.0
+    },
+    {
+      "mz_r": 518.2874,
+      "n_datasets_off_tissue": 3,
+      "pct_datasets": 50.0
+    },
+    {
+      "mz_r": 308.057,
+      "n_datasets_off_tissue": 3,
+      "pct_datasets": 50.0
+    },
+    {
+      "mz_r": 287.9413,
+      "n_datasets_off_tissue": 3,
+      "pct_datasets": 50.0
+    },
+    {
+      "mz_r": 595.2668,
+      "n_datasets_off_tissue": 3,
+      "pct_datasets": 50.0
+    },
+    {
+      "mz_r": 304.063,
+      "n_datasets_off_tissue": 3,
+      "pct_datasets": 50.0
+    },
+    {
+      "mz_r": 518.2804,
+      "n_datasets_off_tissue": 3,
+      "pct_datasets": 50.0
+    },
+    {
+      "mz_r": 296.2467,
+      "n_datasets_off_tissue": 3,
+      "pct_datasets": 50.0
+    },
+    {
+      "mz_r": 328.07,
+      "n_datasets_off_tissue": 3,
+      "pct_datasets": 50.0
+    }
+  ],
+  "time_spent": {
+    "note": "no time_spent_ms data"
+  },
+  "binary_class_balance": {
+    "off_tissue": 27897,
+    "on_tissue": 7007
+  },
+  "class_ratio_off_to_on": 3.98
+}

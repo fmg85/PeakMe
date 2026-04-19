@@ -172,7 +172,7 @@ def evaluate_model(X: np.ndarray, y: np.ndarray, model, name: str, cv=5) -> dict
 # ── Plots ─────────────────────────────────────────────────────────────────────
 
 def plot_feature_distributions(feat_df: pd.DataFrame, out_dir: Path) -> None:
-    features = [c for c in feat_df.columns if c != "label"]
+    features = [c for c in feat_df.columns if c not in ("label", "project", "dataset")]
     n = len(features)
     fig, axes = plt.subplots(3, 4, figsize=(16, 10))
     axes = axes.flatten()
@@ -198,13 +198,14 @@ def plot_feature_distributions(feat_df: pd.DataFrame, out_dir: Path) -> None:
 
 def plot_feature_importance(feat_df: pd.DataFrame, out_dir: Path) -> None:
     binary_df = feat_df[feat_df["label"].isin(["on_tissue", "off_tissue"])].copy()
-    X = binary_df.drop(columns=["label"]).values
+    feat_cols = [c for c in binary_df.columns if c not in ("label", "project", "dataset")]
+    X = binary_df[feat_cols].values
     y = binary_df["label"].values
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
     lr = LogisticRegression(max_iter=1000, class_weight="balanced", random_state=42)
     lr.fit(X_scaled, y)
-    coefs = pd.Series(lr.coef_[0], index=binary_df.drop(columns=["label"]).columns)
+    coefs = pd.Series(lr.coef_[0], index=feat_cols)
     coefs_abs = coefs.abs().sort_values(ascending=True)
     fig, ax = plt.subplots(figsize=(8, 6))
     coefs_abs.plot(kind="barh", ax=ax, color="#3b82f6")

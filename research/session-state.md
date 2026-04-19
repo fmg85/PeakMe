@@ -10,10 +10,10 @@
 
 | Field | Value |
 |---|---|
-| **Active phase** | Phase 1 — Data Audit (ready to start) |
+| **Active phase** | Phase 3 — Transfer Learning (waiting for GPU quota) |
 | **Last updated** | 2026-04-19 |
-| **Last session outcome** | Phase 0.5 lit review complete. Phase 0 data confirmed: CSV at s3://peakme-ions/research/annotations.csv (9.3 MB), ~35k annotated ions, 2 substantive projects confirmed. |
-| **Next immediate action** | Spin up EC2 g4dn.xlarge (us-west-1) and run Phase 1 data audit + Phase 2 image statistics |
+| **Last session outcome** | Phases 1 and 2 complete on EC2 c5.4xlarge. Results downloaded. CPU instance should be terminated. |
+| **Next immediate action** | Terminate CPU instance i-0e2559764337726ac. Then wait for GPU quota approval to run Phase 3. |
 
 ---
 
@@ -21,8 +21,11 @@
 
 | Resource | Details | Status |
 |---|---|---|
-| EC2 instance | Not yet created | Pending |
+| EC2 CPU (c5.4xlarge) | i-0e2559764337726ac, us-west-1 — **TERMINATE NOW** — phases 1-2 complete | ⚠️ Should terminate |
+| EC2 GPU (g4dn.xlarge) | Quota increase pending (request ID: f6ead070f62445759576d94d2a52c6456dBfJlSk) | Pending |
 | S3 annotations CSV | `s3://peakme-ions/research/annotations.csv` (9.3 MB) | ✅ Confirmed |
+| S3 results | `s3://peakme-ions/research/results/` — 01_data_audit.json, 02_baseline_stats.json, 02_image_features.csv | ✅ Uploaded |
+| S3 scripts | `s3://peakme-ions/research/scripts/` — all phase scripts uploaded | ✅ Uploaded |
 | S3 models folder | `s3://peakme-ions/research/models/` (empty, ready for artifacts) | ✅ Confirmed |
 | Ion images | `s3://peakme-ions/datasets/{dataset_id}/{mz:.4f}.png` | ✅ Confirmed |
 
@@ -32,13 +35,15 @@
 
 ## Research Data Summary
 
-From codebase exploration (pre-experiment):
+From Phase 1 (full data audit, 2026-04-19):
 
-- ~30k annotated ions total, majority from human project(s)
-- Mouse project also has annotations, expandable
+- **35,084** total annotated ions, 0 unannotated
+- Binary: **off_tissue = 27,897** (79.5%), **on_tissue = 7,007** (20.0%), unclear = 180 (0.5%)
+- Overall off:on ratio = **3.98:1**
+- 6 datasets across 2 projects
 - Labels: **on tissue** (biological), **off tissue** (chemical noise, incl. DHAP matrix ions), **unclear**
 - Ionisation matrix: **DHAP** (2,5-Dihydroxyacetophenone) — all current data
-- Ion images: PNG, 720×720 or 400×400 px, viridis colormap, stored at `s3://peakme-ions/datasets/{dataset_id}/{mz:.4f}.png`
+- Ion images: PNG, viridis colormap, stored at `s3://peakme-ions/datasets/{dataset_id}/{mz:.4f}.png`
 - Annotations CSV schema: `ion_id, dataset_id, mz_value, image_key, sort_order, dataset_name, sample_type, project_name, label_name, confidence, time_spent_ms, annotated_at`
 
 ---
@@ -51,18 +56,16 @@ From codebase exploration (pre-experiment):
 
 | Project | Organism | Datasets | Total ions | Off tissue | On tissue | Unclear | Other |
 |---|---|---|---|---|---|---|---|
-| **GCPL** | Human (likely) | 5 (gpcl551, gpcl611, gpcl852, gpcl858, gpcl968) | 30,012 | 84.6% (25,395) | 15.0% (4,511) | 0.4% (106) | — |
-| **65DNeoInfM3_10_test** | Mouse (infected stomach) | 1 (65D_m3_sl10) | 5,072 | 49.3% (2,502) | 47.9% (2,431) | 1.5% (74) | 1.3% HP-associated (65) |
+| **GCPL** | Human (Gastric Cancer PreNeoplastic Lesions) | 5 (gpcl551, gpcl611, gpcl852, gpcl858, gpcl968) | 30,012 | 84.6% (25,395) | 15.0% (4,511) | 0.4% (106) | — |
+| **65DNeoInfM3_10_test** | Mouse (infected stomach) | 1 (65D_m3_sl10) | 5,072 | 49.3% (2,502) | 49.2% (2,496) | 1.5% (74) | — |
 
-**Total research-grade annotated ions: ~35,084**
+**Total research-grade annotated ions: 35,084**
 
 **Key observations:**
-- GCPL has severe class imbalance: 5.7:1 off-tissue vs on-tissue. Must use class weights or stratified sampling.
-- Mouse dataset is nearly balanced (~50/50) — better for unbiased initial training.
-- "HP-associated" label (Helicobacter pylori-related ions) appears only in mouse project — treat as "on tissue" or separate class TBD.
+- GCPL has severe class imbalance: 5.64:1 off-tissue vs on-tissue. Must use class weights or stratified sampling.
+- Mouse dataset is nearly balanced (49.3% / 49.2%) — better for unbiased initial training.
 - `sample_type` is null for all GCPL datasets — organism info is in project name only.
-- `confidence` and `time_spent_ms` are null for most GCPL annotations.
-- Label naming inconsistency: "unclear" (mouse) vs "Unclear" (GCPL) — normalize to lowercase in preprocessing.
+- `confidence` and `time_spent_ms` are null for most GCPL annotations (no time_spent_ms data at all).
 - CSV schema confirmed: `ion_id, dataset_id, mz_value, image_key, sort_order, dataset_name, sample_type, project_name, label_name, confidence, time_spent_ms, annotated_at`
 - S3 image key format: `datasets/{dataset_id}/{mz:.4f}.png`
 
@@ -95,6 +98,40 @@ From codebase exploration (pre-experiment):
 3. ResNet-18 with ImageNet weights
 4. MobileNetV3-Small with ImageNet weights
 
+### Phase 1 — Data Audit (complete, 2026-04-19)
+
+**Results file:** `research/results/01_data_audit.json`
+
+| Metric | Value |
+|---|---|
+| Total annotated ions | 35,084 |
+| Binary off:on ratio | 3.98:1 (off=27,897 / on=7,007) |
+| GCPL off:on ratio | 5.64:1 (off=25,395 / on=4,511) |
+| Mouse off:on ratio | 1.00:1 (off=2,502 / on=2,496) |
+| Cross-organism m/z overlap | 8.46% of human mz found in mouse; 28.98% of mouse in human (±1 mDa) |
+| time_spent_ms data | None (all null) |
+
+**DHAP artefact candidates (top by dataset prevalence):**
+- m/z 254.0854, 254.0586, 324.0935, 310.0788, 329.0408 — each off-tissue in 4/6 datasets (66.7%)
+- Full top-50 list in `01_data_audit.json`
+
+**Key implication for model:** Cross-organism overlap is low (8-29%), so transfer relies on learning visual image patterns (spatial structure, texture) not m/z identity.
+
+### Phase 2 — Image Statistics Baseline (complete, 2026-04-19)
+
+**Results file:** `research/results/02_baseline_stats.json`
+
+| Model | F1 (5-fold CV) | AUC |
+|---|---|---|
+| Logistic Regression (11 features) | 0.7328 ± 0.0101 | 0.8158 |
+| Decision Tree (depth=6) | 0.7044 ± 0.0248 | 0.7255 |
+
+**11 hand-crafted features:** mean_intensity, std_intensity, max_intensity, fg_fraction, hist_entropy, spatial_cv, center_periphery_ratio, gradient_mean, laplacian_var, quadrant_std, hv_ratio
+
+**Key insight:** Simple image statistics achieve F1≈0.73 without any deep learning. This is a strong baseline — deep learning must beat this to justify the added complexity. Given OffsampleAI achieved F1=0.97 on the same task, we expect significant headroom.
+
+**Per-project training F1:** GCPL (n=790) = 0.7055, Mouse (n=210) = 0.734. Mouse slightly easier likely due to better class balance.
+
 ---
 
 ## Decisions Made
@@ -111,6 +148,7 @@ From codebase exploration (pre-experiment):
 | HP-associated = on tissue | Biologically real Helicobacter pylori signal, confirmed by user |
 | GCPL = human, Gastric Cancer PreNeoplastic Lesions | Confirmed by user |
 | 4-model comparison: add ResNet-50/OffsampleAI to original 3 | Keep EfficientNet-B0, ResNet-18, MobileNetV3-Small from original plan plus OffsampleAI comparison |
+| Scripts delivered via S3, not GitHub | Push credentials unavailable from dev machine; EC2 downloads from s3://peakme-ions/research/scripts/ |
 
 ---
 
@@ -130,10 +168,10 @@ From codebase exploration (pre-experiment):
 |---|---|---|
 | 0 — Scaffolding | ✅ Complete | research/ folder created, CLAUDE.md updated |
 | 0.5 — Literature review | ✅ Complete | OffsampleAI (F1=0.97, 23k public images) is key prior work; plan updated |
-| 0.6 — Download OffsampleAI dataset | ⏳ Pending (on EC2) | — |
-| 1 — Data audit | 🔄 Partially done (DB queries); full audit on EC2 pending | GCPL: 30k ions, 85% off-tissue; Mouse: 5k, ~50/50 |
-| 2 — Image statistics baseline | ⏳ Pending | — |
-| 3 — Transfer learning | ⏳ Pending | — |
+| 0.6 — Download OffsampleAI dataset | ⏳ Pending (needs GPU instance) | — |
+| 1 — Data audit | ✅ Complete | 35,084 ions; off:on = 3.98:1; cross-organism overlap 8-29%; DHAP artefact candidates identified |
+| 2 — Image statistics baseline | ✅ Complete | LogReg F1=0.7328, AUC=0.8158 — strong baseline without deep learning |
+| 3 — Transfer learning | ⏳ Pending (GPU quota approval required) | — |
 | 4 — Active learning simulation | ⏳ Pending | — |
 | 5 — Operational analysis | ⏳ Pending | — |
 | 6 — Research report | ⏳ Pending | — |

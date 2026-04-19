@@ -1,0 +1,56 @@
+{
+  "n_images": 1000,
+  "feature_names": [
+    "mean_intensity",
+    "std_intensity",
+    "max_intensity",
+    "fg_fraction",
+    "hist_entropy",
+    "spatial_cv",
+    "center_periphery_ratio",
+    "gradient_mean",
+    "laplacian_var",
+    "quadrant_std",
+    "hv_ratio"
+  ],
+  "models": [
+    {
+      "model": "LogisticRegression",
+      "f1_mean": 0.7328,
+      "f1_std": 0.0101,
+      "f1_per_fold": [
+        0.7423,
+        0.738,
+        0.7143,
+        0.7396,
+        0.73
+      ],
+      "auc_mean": 0.8158,
+      "auc_std": 0.0211
+    },
+    {
+      "model": "DecisionTree(depth=6)",
+      "f1_mean": 0.7044,
+      "f1_std": 0.0248,
+      "f1_per_fold": [
+        0.7027,
+        0.707,
+        0.7175,
+        0.6599,
+        0.7347
+      ],
+      "auc_mean": 0.7255,
+      "auc_std": 0.0279
+    }
+  ],
+  "per_project_train_f1": {
+    "65DNeoInfM3_10_test": {
+      "n": 210,
+      "f1": 0.734
+    },
+    "GCPL": {
+      "n": 790,
+      "f1": 0.7055
+    }
+  }
+}
