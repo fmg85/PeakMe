@@ -1,0 +1,12 @@
+# Downloaded images and large data files — fetched from S3 at runtime
+samples/
+data/
+*.csv
+*.parquet
+*.pt
+*.pth
+*.pkl
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+__pycache__/
