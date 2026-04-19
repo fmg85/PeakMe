@@ -10,10 +10,10 @@
 
 | Field | Value |
 |---|---|
-| **Active phase** | Phase 0 — AWS Setup + Data Confirmation (plan checkpoint passed) |
+| **Active phase** | Phase 1 — Data Audit (ready to start) |
 | **Last updated** | 2026-04-19 |
-| **Last session outcome** | Phase 0.5 literature review complete. OffsampleAI is a critical prior work — will be used as pretraining base. Plan checkpoint reviewed — see decisions below. |
-| **Next immediate action** | 1. Confirm S3 bucket/path for PeakMe Research CSV. 2. Spin up EC2 g4dn.xlarge (us-west-1). 3. Download OffsampleAI dataset. |
+| **Last session outcome** | Phase 0.5 lit review complete. Phase 0 data confirmed: CSV at s3://peakme-ions/research/annotations.csv (9.3 MB), ~35k annotated ions, 2 substantive projects confirmed. |
+| **Next immediate action** | Spin up EC2 g4dn.xlarge (us-west-1) and run Phase 1 data audit + Phase 2 image statistics |
 
 ---
 
@@ -21,10 +21,10 @@
 
 | Resource | Details | Status |
 |---|---|---|
-| EC2 instance | Not yet created | — |
-| S3 research folder | Bucket: TBD (us-west-1); prefix: PeakMe Research/ | To confirm |
-| Annotations CSV | Uploaded by user — path TBD | To confirm |
-| Ion images | Bucket: `peakme-ions`, prefix: `datasets/{dataset_id}/` | Known |
+| EC2 instance | Not yet created | Pending |
+| S3 annotations CSV | `s3://peakme-ions/research/annotations.csv` (9.3 MB) | ✅ Confirmed |
+| S3 models folder | `s3://peakme-ions/research/models/` (empty, ready for artifacts) | ✅ Confirmed |
+| Ion images | `s3://peakme-ions/datasets/{dataset_id}/{mz:.4f}.png` | ✅ Confirmed |
 
 > **Rule:** Always list instance ID and type here when an EC2 instance is running. Terminate before closing session.
 
@@ -44,6 +44,27 @@ From codebase exploration (pre-experiment):
 ---
 
 ## Preliminary Findings
+
+### Phase 0 — Data audit from DB (preliminary, before EC2)
+
+**Projects confirmed for research (ignoring test/toy projects):**
+
+| Project | Organism | Datasets | Total ions | Off tissue | On tissue | Unclear | Other |
+|---|---|---|---|---|---|---|---|
+| **GCPL** | Human (likely) | 5 (gpcl551, gpcl611, gpcl852, gpcl858, gpcl968) | 30,012 | 84.6% (25,395) | 15.0% (4,511) | 0.4% (106) | — |
+| **65DNeoInfM3_10_test** | Mouse (infected stomach) | 1 (65D_m3_sl10) | 5,072 | 49.3% (2,502) | 47.9% (2,431) | 1.5% (74) | 1.3% HP-associated (65) |
+
+**Total research-grade annotated ions: ~35,084**
+
+**Key observations:**
+- GCPL has severe class imbalance: 5.7:1 off-tissue vs on-tissue. Must use class weights or stratified sampling.
+- Mouse dataset is nearly balanced (~50/50) — better for unbiased initial training.
+- "HP-associated" label (Helicobacter pylori-related ions) appears only in mouse project — treat as "on tissue" or separate class TBD.
+- `sample_type` is null for all GCPL datasets — organism info is in project name only.
+- `confidence` and `time_spent_ms` are null for most GCPL annotations.
+- Label naming inconsistency: "unclear" (mouse) vs "Unclear" (GCPL) — normalize to lowercase in preprocessing.
+- CSV schema confirmed: `ion_id, dataset_id, mz_value, image_key, sort_order, dataset_name, sample_type, project_name, label_name, confidence, time_spent_ms, annotated_at`
+- S3 image key format: `datasets/{dataset_id}/{mz:.4f}.png`
 
 ### Phase 0.5 — Literature Review (complete)
 
@@ -94,6 +115,8 @@ From codebase exploration (pre-experiment):
 1. What is the exact S3 bucket name and path for the PeakMe Research folder?
 2. What are the exact project names and dataset names in the CSV (to confirm organism labelling)?
 3. Are there any existing image quality scores or metadata from Metaspace for these same datasets?
+4. What does "GCPL" stand for? (To confirm organism/tissue type for documentation)
+5. Should "HP-associated" label be treated as "on tissue" (it's a biological signal) or as a separate category?
 
 ---
 
@@ -103,8 +126,8 @@ From codebase exploration (pre-experiment):
 |---|---|---|
 | 0 — Scaffolding | ✅ Complete | research/ folder created, CLAUDE.md updated |
 | 0.5 — Literature review | ✅ Complete | OffsampleAI (F1=0.97, 23k public images) is key prior work; plan updated |
-| 0.6 — Download OffsampleAI dataset | ⏳ Pending | — |
-| 1 — Data audit | ⏳ Pending | — |
+| 0.6 — Download OffsampleAI dataset | ⏳ Pending (on EC2) | — |
+| 1 — Data audit | 🔄 Partially done (DB queries); full audit on EC2 pending | GCPL: 30k ions, 85% off-tissue; Mouse: 5k, ~50/50 |
 | 2 — Image statistics baseline | ⏳ Pending | — |
 | 3 — Transfer learning | ⏳ Pending | — |
 | 4 — Active learning simulation | ⏳ Pending | — |
