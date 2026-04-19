@@ -1,5 +1,6 @@
 # Downloaded images and large data files — fetched from S3 at runtime
 samples/
+images/
 data/
 *.csv
 *.parquet
