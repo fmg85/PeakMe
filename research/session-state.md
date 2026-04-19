@@ -12,8 +12,8 @@
 |---|---|
 | **Active phase** | Phase 3 — Transfer Learning (waiting for GPU quota) |
 | **Last updated** | 2026-04-19 |
-| **Last session outcome** | Phases 1 and 2 complete on EC2 c5.4xlarge. Results downloaded. CPU instance should be terminated. |
-| **Next immediate action** | Terminate CPU instance i-0e2559764337726ac. Then wait for GPU quota approval to run Phase 3. |
+| **Last session outcome** | Phases 1-2 complete. Phase 3 CPU run launched on i-099420ac04180723f. Script runs models one by one (MobileNet→ResNet18→EfficientNet→ResNet50), checks GPU quota between each, stops early if quota approved. |
+| **Next immediate action** | Monitor Phase 3 progress. Terminate i-099420ac04180723f when complete or if GPU quota approved. |
 
 ---
 
@@ -21,7 +21,7 @@
 
 | Resource | Details | Status |
 |---|---|---|
-| EC2 CPU (c5.4xlarge) | i-0e2559764337726ac, us-west-1 — **TERMINATE NOW** — phases 1-2 complete | ⚠️ Should terminate |
+| EC2 CPU (c5.4xlarge) | i-099420ac04180723f, us-west-1 — **RUNNING** Phase 3 (incremental, CPU). Terminate when phase3_status.txt = CPU_COMPLETE or GPU_QUOTA_APPROVED | ⚠️ Active |
 | EC2 GPU (g4dn.xlarge) | G-family on-demand quota request ID: f6ead070f62445759576d94d2a52c6456dBfJlSk — CASE_OPENED | Pending |
 | EC2 GPU (p3.2xlarge) | P-family on-demand quota request ID: 20ad2b4e799343d4bbedcff0a0762db158Wy2nAG — PENDING | Pending |
 | S3 annotations CSV | `s3://peakme-ions/research/annotations.csv` (9.3 MB) | ✅ Confirmed |

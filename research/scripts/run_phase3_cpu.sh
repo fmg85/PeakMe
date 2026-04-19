@@ -8,8 +8,8 @@ REGION="us-west-1"
 RESULTS_DIR="/home/ubuntu/research_results"
 DATA_DIR="/home/ubuntu/research_data"
 CACHE_DIR="/home/ubuntu/ion_cache"
-PYTHON=/opt/pytorch/bin/python
-PIP=/opt/pytorch/bin/pip
+PYTHON=python3
+PIP=pip3
 
 # GPU quota request IDs — checked after each model
 QUOTA_G="f6ead070f62445759576d94d2a52c6456dBfJlSk"
@@ -22,7 +22,8 @@ echo "=== PeakMe Research — Phase 3 (CPU, incremental) ==="
 date
 
 echo "--- Installing deps ---"
-$PIP install -q scikit-learn
+$PIP install -q torch torchvision --index-url https://download.pytorch.org/whl/cpu
+$PIP install -q scikit-learn boto3 pandas pillow matplotlib scipy
 
 echo "--- Syncing scripts from S3 ---"
 aws s3 sync "s3://$BUCKET/research/scripts/" /home/ubuntu/scripts/ --region "$REGION"
