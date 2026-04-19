@@ -89,10 +89,11 @@ From codebase exploration (pre-experiment):
 - Known approximate DHAP cluster ions: [DHAP-H]⁻ m/z ≈ 151.04; [2DHAP-H]⁻ ≈ 303.09; [3DHAP-H]⁻ ≈ 455.13
 - Key artefact: DHAP volatility under vacuum → scan-direction intensity gradients in long runs
 
-**Architecture update**
-- Primary: ResNet-50 with OffsampleAI pretrained weights
-- Alternative: EfficientNet-B0 with ImageNet weights
-- MobileNetV3-Small: operational inference only (not training)
+**Architecture update — 4-model comparison**
+1. ResNet-50 with OffsampleAI pretrained weights (new addition — closest prior work)
+2. EfficientNet-B0 with ImageNet weights
+3. ResNet-18 with ImageNet weights
+4. MobileNetV3-Small with ImageNet weights
 
 ---
 
@@ -107,16 +108,19 @@ From codebase exploration (pre-experiment):
 | Add Phase 0.6: download OffsampleAI dataset | Need public data for pretraining comparison and to understand label mapping |
 | Coreset sampling for first ~100 AL labels | Uncertainty sampling unreliable at very low budgets; coreset is safer starting strategy |
 | Add DHAP artefact m/z list as a data audit output | No published DHAP list exists; PeakMe annotations can contribute this |
+| HP-associated = on tissue | Biologically real Helicobacter pylori signal, confirmed by user |
+| GCPL = human, Gastric Cancer PreNeoplastic Lesions | Confirmed by user |
+| 4-model comparison: add ResNet-50/OffsampleAI to original 3 | Keep EfficientNet-B0, ResNet-18, MobileNetV3-Small from original plan plus OffsampleAI comparison |
 
 ---
 
 ## Open Questions
 
-1. What is the exact S3 bucket name and path for the PeakMe Research folder?
-2. What are the exact project names and dataset names in the CSV (to confirm organism labelling)?
-3. Are there any existing image quality scores or metadata from Metaspace for these same datasets?
-4. What does "GCPL" stand for? (To confirm organism/tissue type for documentation)
-5. Should "HP-associated" label be treated as "on tissue" (it's a biological signal) or as a separate category?
+~~1. S3 path?~~ `s3://peakme-ions/research/annotations.csv` ✅
+~~2. Project/dataset names?~~ Confirmed via DB queries ✅
+3. Any Metaspace scores for these datasets? (nice-to-have, not blocking)
+~~4. GCPL = ?~~ Gastric Cancer PreNeoplastic Lesions — human tissue ✅
+~~5. HP-associated label?~~ Treat as "on tissue" ✅
 
 ---
 
