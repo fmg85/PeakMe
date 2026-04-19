@@ -84,6 +84,20 @@ chore: short description     # tooling, deps, config
 breaking: short description  # breaking change (rare)
 ```
 
+## Research workstream — ML pre-classification
+
+An **active research project** lives under `research/` on the `main` branch.
+It is fully isolated from app code and has **separate commit conventions and CI rules**:
+
+- Commits use prefix `research:` (not a conventional commit type — no CHANGELOG entry required)
+- CI doc checks do **not** apply to `research/**` (the path patterns only cover `backend/`, `frontend/src/`, `r-scripts/`)
+- **Do not** modify files under `research/` as part of normal feature/fix work
+- **Do not** import or reference anything from `research/` in app code
+- The `research/session-state.md` file tracks progress, findings, and AWS resources across sessions
+- The `research/report.md` file is the living research report (updated incrementally)
+
+Goal: train and evaluate an ML classifier to pre-rank ion images by biological relevance, so annotators see the most meaningful ions first. See `research/session-state.md` for current status.
+
 ## Key file locations
 
 | What | Where |
