@@ -396,6 +396,36 @@ def plot_training_curves(results: list[dict], out_dir: Path) -> None:
     print("Saved: 03b_training_curves.png")
 
 
+# ── Incremental save ─────────────────────────────────────────────────────────
+
+def _save_results(all_results: list, cross_org: dict, out_dir: Path) -> None:
+    summary = []
+    for r in all_results:
+        entry = {
+            "model": r["model_name"],
+            "val_f1": r["best_val_f1"],
+            "test_f1_human": r["test_metrics"]["f1"],
+            "test_auc_human": r["test_metrics"]["auc"],
+            "test_f1_mouse": cross_org.get(r["model_name"], {}).get("f1"),
+            "coverage_70pct": r["test_metrics"].get("coverage_at_70"),
+        }
+        summary.append(entry)
+    stripped = []
+    for r in all_results:
+        rc = dict(r)
+        rc.pop("_probs", None)
+        rc.pop("_labels", None)
+        stripped.append(rc)
+    payload = {
+        "models_complete": [r["model_name"] for r in stripped],
+        "model_results": stripped,
+        "cross_organism": cross_org,
+        "summary": summary,
+    }
+    with open(out_dir / "03_model_metrics.json", "w") as f:
+        json.dump(payload, f, indent=2)
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
@@ -410,6 +440,9 @@ def main():
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--offsample-weights", default=None,
                         help="Path to OffsampleAI checkpoint .pth file")
+    parser.add_argument("--models", default=None,
+                        help="Comma-separated list of models to run (default: all 4). "
+                             "Choices: resnet50_offsample,efficientnet_b0,resnet18,mobilenet_v3_small")
     parser.add_argument("--cross-org-only", action="store_true",
                         help="Only run cross-organism eval (skip training)")
     args = parser.parse_args()
@@ -460,21 +493,43 @@ def main():
 
     s3 = boto3.client("s3", region_name=args.region)
 
-    MODEL_NAMES = [
+    ALL_MODELS = [
         "resnet50_offsample",
         "efficientnet_b0",
         "resnet18",
         "mobilenet_v3_small",
     ]
+    MODEL_NAMES = [m.strip() for m in args.models.split(",")] if args.models else ALL_MODELS
 
-    all_results = []
+    # Load any previously completed model results (for incremental runs)
+    json_path = out_dir / "03_model_metrics.json"
+    existing = {}
+    if json_path.exists():
+        with open(json_path) as f:
+            prev = json.load(f)
+        for r in prev.get("model_results", []):
+            existing[r["model_name"]] = r
+        print(f"Loaded {len(existing)} previously completed model(s): {list(existing.keys())}")
+
+    all_results = list(existing.values())
+
+    if args.cross_org_only:
+        MODEL_NAMES = []  # skip training loop entirely
+
     for model_name in MODEL_NAMES:
+        if model_name in existing:
+            print(f"Skipping {model_name} — already in results")
+            continue
         result = train_model(
             model_name, train_df, val_df, test_human_df,
             s3, args.bucket, args, device, args.cache_dir,
             args.offsample_weights
         )
         all_results.append(result)
+
+        # Save incremental results after each model (shell script checks for completion)
+        _save_results(all_results, {}, out_dir)
+        print(f"  Checkpoint saved after {model_name}")
 
     # Cross-organism evaluation (train on human → test on mouse)
     print("\n=== Cross-Organism Transfer (human → mouse) ===")
@@ -504,29 +559,20 @@ def main():
         })
 
     print("\n=== Model Comparison ===")
+    summary = []
+    for r in all_results:
+        summary.append({
+            "model": r["model_name"],
+            "val_f1": r["best_val_f1"],
+            "test_f1_human": r["test_metrics"]["f1"],
+            "test_auc_human": r["test_metrics"]["auc"],
+            "test_f1_mouse": cross_org_results.get(r["model_name"], {}).get("f1"),
+            "coverage_70pct": r["test_metrics"].get("coverage_at_70"),
+        })
     print(pd.DataFrame(summary).to_string(index=False))
 
-    # Strip large _probs/_labels before saving
-    for r in all_results:
-        r.pop("_probs", None)
-        r.pop("_labels", None)
-
-    final = {
-        "splits": {
-            "train": len(train_df),
-            "val": len(val_df),
-            "test_human": len(test_human_df),
-            "test_mouse": len(test_mouse_df),
-        },
-        "model_results": all_results,
-        "cross_organism": cross_org_results,
-        "summary": summary,
-    }
-
-    json_path = out_dir / "03_model_metrics.json"
-    with open(json_path, "w") as f:
-        json.dump(final, f, indent=2)
-    print(f"\nSaved: {json_path}")
+    _save_results(all_results, cross_org_results, out_dir)
+    print(f"\nSaved: {out_dir / '03_model_metrics.json'}")
 
 
 if __name__ == "__main__":
