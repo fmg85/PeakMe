@@ -22,7 +22,8 @@
 | Resource | Details | Status |
 |---|---|---|
 | EC2 CPU (c5.4xlarge) | i-0e2559764337726ac, us-west-1 — **TERMINATE NOW** — phases 1-2 complete | ⚠️ Should terminate |
-| EC2 GPU (g4dn.xlarge) | Quota increase pending (request ID: f6ead070f62445759576d94d2a52c6456dBfJlSk) | Pending |
+| EC2 GPU (g4dn.xlarge) | G-family on-demand quota request ID: f6ead070f62445759576d94d2a52c6456dBfJlSk — CASE_OPENED | Pending |
+| EC2 GPU (p3.2xlarge) | P-family on-demand quota request ID: 20ad2b4e799343d4bbedcff0a0762db158Wy2nAG — PENDING | Pending |
 | S3 annotations CSV | `s3://peakme-ions/research/annotations.csv` (9.3 MB) | ✅ Confirmed |
 | S3 results | `s3://peakme-ions/research/results/` — 01_data_audit.json, 02_baseline_stats.json, 02_image_features.csv | ✅ Uploaded |
 | S3 scripts | `s3://peakme-ions/research/scripts/` — all phase scripts uploaded | ✅ Uploaded |
