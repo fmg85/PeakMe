@@ -399,26 +399,37 @@ def plot_training_curves(results: list[dict], out_dir: Path) -> None:
 # ── Incremental save ─────────────────────────────────────────────────────────
 
 def _save_results(all_results: list, cross_org: dict, out_dir: Path) -> None:
-    summary = []
-    for r in all_results:
-        entry = {
-            "model": r["model_name"],
-            "val_f1": r["best_val_f1"],
-            "test_f1_human": r["test_metrics"]["f1"],
-            "test_auc_human": r["test_metrics"]["auc"],
-            "test_f1_mouse": cross_org.get(r["model_name"], {}).get("f1"),
-            "coverage_70pct": r["test_metrics"].get("coverage_at_70"),
-        }
-        summary.append(entry)
     stripped = []
     for r in all_results:
         rc = dict(r)
         rc.pop("_probs", None)
         rc.pop("_labels", None)
         stripped.append(rc)
+        # Per-model file — safe for parallel instances (no shared write conflict)
+        with open(out_dir / f"03_metrics_{rc['model_name']}.json", "w") as f:
+            json.dump({**rc, "cross_organism": cross_org.get(rc["model_name"])}, f, indent=2)
+
+    # Rebuild combined from all per-model files on disk (picks up parallel results)
+    all_on_disk = {}
+    for p in sorted(out_dir.glob("03_metrics_*.json")):
+        with open(p) as f:
+            d = json.load(f)
+        all_on_disk[d["model_name"]] = d
+
+    summary = []
+    for r in all_on_disk.values():
+        summary.append({
+            "model": r["model_name"],
+            "val_f1": r["best_val_f1"],
+            "test_f1_human": r["test_metrics"]["f1"],
+            "test_auc_human": r["test_metrics"]["auc"],
+            "test_f1_mouse": (r.get("cross_organism") or {}).get("f1"),
+            "coverage_70pct": r["test_metrics"].get("coverage_at_70"),
+        })
+
     payload = {
-        "models_complete": [r["model_name"] for r in stripped],
-        "model_results": stripped,
+        "models_complete": list(all_on_disk.keys()),
+        "model_results": list(all_on_disk.values()),
         "cross_organism": cross_org,
         "summary": summary,
     }
