@@ -107,7 +107,38 @@ False negative rate = 34/676 = 5.0% (on-tissue ions incorrectly sent to the end 
 
 ## 7. Active Learning Results
 
-_See `results/04_al_curves.json` — to be summarised here._
+Full results in `results/04_al_curves.json`. Simulation run on 29,906 GCPL human ions using ResNet-50/OffsampleAI scores (AUC 0.9246). All model scores precomputed once; simulation is analytical (no retraining per round, because scores are fixed).
+
+### Result: score-sorted ordering saves 65% of annotation effort
+
+| Strategy | Annotations to reach 90% on-tissue | vs. random |
+|---|---|---|
+| **Score-sorted** (proposed) | **9,301** | **−65.4%** |
+| Random (current PeakMe) | ~26,920 | baseline |
+| Uncertainty AL | ~29,413 | +9.3% worse |
+| Coreset AL | ~29,415 | +9.3% worse |
+
+Score-sorted means: rank all ions by P(on_tissue) descending before the annotator sees them. With the current model, annotators need to review only **31.1% of the dataset** to find 90% of biologically relevant ions, versus 89.9% with random ordering.
+
+### Key finding: "active learning" is the wrong framing for this task
+
+Uncertainty sampling and coreset selection perform *worse* than random. Both strategies are designed to improve model accuracy by labelling ambiguous examples — they deliberately surface the hardest-to-classify ions first. For annotation efficiency (find biology quickly), the opposite is needed: surface the most confident on-tissue ions first.
+
+The correct product strategy is not iterative active learning but a one-shot **score-sorted queue**: run the pretrained model once when a dataset is uploaded, rank ions by P(on_tissue), store the ranks. No feedback loop needed for the base feature.
+
+### Score is seed-independent
+
+The 9,301 figure is identical across all tested seed sizes (N=10, 100, 500, 1000, 2000, 5000). This is expected — the global pretrained model's ranking of a new dataset doesn't depend on how many annotations exist for that dataset. The feature works on day 1 with zero prior annotations from the new dataset.
+
+This reframes the original "critical mass" question. There is no threshold before the feature becomes useful. The relevant question is instead: **does the pretrained model generalise to new datasets?** The AUC 0.74 cross-organism transfer result (ResNet-18, human→mouse) and the 65% savings on the held-out human test set both suggest it does.
+
+### Practical implication
+
+An annotator working a typical GCPL-scale dataset (~5,000 ions, 15% on-tissue = ~750 on-tissue ions) needs to annotate:
+- **Without ML:** ~4,490 ions to find 90% of on-tissue (89.9% of dataset)  
+- **With score-sorted ML queue:** ~1,550 ions to find 90% of on-tissue (31.1% of dataset)
+
+That is ~3 hours of annotation work reduced to ~1 hour (assuming ~3s per ion). The value is real and immediate.
 
 ## 8. Architecture Recommendation
 

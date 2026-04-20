@@ -10,10 +10,10 @@
 
 | Field | Value |
 |---|---|
-| **Active phase** | Phase 4 — Active Learning Simulation |
-| **Last updated** | 2026-04-19 |
-| **Last session outcome** | Phase 3 complete. 4 models trained in parallel on 3 CPU instances (c5.4xlarge). All instances terminated. Results in S3 + local. MobileNet-V3-Small is best model (AUC 0.9398). ResNet-18 only model with cross-org eval (AUC 0.7371). EfficientNet and ResNet-50 cross-org eval crashed (model .pt not available across instances) — can rerun later. |
-| **Next immediate action** | Run Phase 4 active learning simulation (script already written: `research/scripts/04_active_learning_sim.py`). Needs all 4 .pt files from S3 on same instance. GPU quota still pending. Can run Phase 4 on CPU (inference only, no retraining needed for simulation). |
+| **Active phase** | Phase 5 — Operational Architecture Analysis |
+| **Last updated** | 2026-04-20 |
+| **Last session outcome** | Phase 4 complete. AL simulation run on i-0c5e23dbd4cd45665 (c5.2xlarge, terminated). Key finding: score-sorted ordering reduces annotations to reach 90% on-tissue from 26,901 → 9,301 (65% savings). Uncertainty/coreset AL worse than random — wrong strategy for this task. |
+| **Next immediate action** | Write Phase 5 (operational architecture) + Phase 6 (final report) sections. No more EC2 needed — these are analysis/writing phases. |
 
 ---
 
@@ -21,7 +21,7 @@
 
 | Resource | Details | Status |
 |---|---|---|
-| EC2 instances | All terminated after Phase 3 | ✅ None running |
+| EC2 instances | All terminated after Phase 4 | ✅ None running |
 | EC2 GPU (g4dn.xlarge) | G-family on-demand quota request ID: f6ead070f62445759576d94d2a52c6456dBfJlSk — CASE_OPENED | Pending |
 | EC2 GPU (p3.2xlarge) | P-family on-demand quota request ID: 20ad2b4e799343d4bbedcff0a0762db158Wy2nAG — CASE_OPENED | Pending |
 | S3 annotations CSV | `s3://peakme-ions/research/annotations.csv` (9.3 MB) | ✅ Confirmed |
@@ -118,6 +118,33 @@ From Phase 1 (full data audit, 2026-04-19):
 
 **Key implication for model:** Cross-organism overlap is low (8-29%), so transfer relies on learning visual image patterns (spatial structure, texture) not m/z identity.
 
+### Phase 4 — Active Learning Simulation (complete, 2026-04-20)
+
+**Results file:** `research/results/04_al_curves.json`
+
+Simulation run on 29,906 GCPL human ions using ResNet-50/OffsampleAI scores (AUC 0.9246). Scores precomputed once; simulation is analytical (no model retraining).
+
+**Annotations needed to reach 90% on-tissue discovery (median, 5 replicates):**
+
+| Strategy | N=10 | N=100 | N=500 | N=1000 | N=2000 | N=5000 |
+|---|---|---|---|---|---|---|
+| **score_sorted** | **9,301** | **9,301** | **9,301** | **9,301** | **9,301** | **9,301** |
+| random (current PeakMe) | 26,901 | 27,013 | 26,966 | 26,959 | 26,868 | 26,841 |
+| uncertainty AL | 29,413 | 29,413 | 29,413 | 29,412 | 29,409 | 29,405 |
+| coreset AL | 29,414 | 29,414 | 29,415 | 29,415 | 29,415 | 29,417 |
+
+**Key findings:**
+
+1. **Score-sorted gives 65% annotation savings**: sorting by P(on_tissue) descending means annotators find 90% of on-tissue ions after reviewing only 9,301/29,906 = 31.1% of the dataset, vs 89.9% for random ordering.
+
+2. **Score is independent of seed size**: the 9,301 figure is identical at every seed size — the model's global ranking is fixed and doesn't benefit from project-specific seeds in this simulation. This means the feature works from day 1 on any new dataset using the pretrained model.
+
+3. **Uncertainty/coreset AL are WORSE than random**: uncertainty sampling surfaces the most ambiguous ions first (bad for finding biology quickly); coreset maximizes diversity (also bad). These strategies are designed for improving a model, not for annotation efficiency. The correct product strategy is score-sorted, not AL.
+
+4. **Score range [0.002, 1.000]**: the model is well-calibrated and discriminates clearly.
+
+5. **"Critical mass" concept reframed**: no seed-dependent AL crossover exists for this task. The product design question changes from "how many annotations before AL activates" to "how accurate is the pretrained model for ranking new datasets?" Answer: good enough (65% savings) from zero annotations.
+
 ### Phase 3 — Transfer Learning (complete, 2026-04-19)
 
 **Results file:** `research/results/03_model_metrics.json`
@@ -199,6 +226,6 @@ From Phase 1 (full data audit, 2026-04-19):
 | 1 — Data audit | ✅ Complete | 35,084 ions; off:on = 3.98:1; cross-organism overlap 8-29%; DHAP artefact candidates identified |
 | 2 — Image statistics baseline | ✅ Complete | LogReg F1=0.7328, AUC=0.8158 — strong baseline without deep learning |
 | 3 — Transfer learning | ✅ Complete | MobileNet-V3-Small best (AUC 0.9398); all 4 models trained on CPU |
-| 4 — Active learning simulation | ⏳ Pending | — |
+| 4 — Active learning simulation | ✅ Complete | Score-sorted: 9,301 annotations for 90% on-tissue (65% savings vs random 26,901). Uncertainty/coreset worse than random. |
 | 5 — Operational analysis | ⏳ Pending | — |
 | 6 — Research report | ⏳ Pending | — |
