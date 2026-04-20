@@ -242,7 +242,7 @@ The model reduces annotation effort but does not replace it. 9,301 annotations t
 
 4. **Scoring job** — a Python function that: loads ONNX model, streams images from S3 (reuse the S3 streaming code from Phase 3), writes scores to DB. Triggered on dataset `ready` transition.
 
-5. **Queue endpoint sort** — modify `GET /api/datasets/{dataset_id}/ions/queue` to `ORDER BY ml_score DESC NULLS LAST` when scores exist. No frontend changes needed — ions arrive in a different order, but the annotation UX is identical.
+5. **Queue endpoint sort** — modify `GET /api/datasets/{dataset_id}/ions/queue` to `ORDER BY ml_score DESC NULLS LAST` when scores exist. Sorting by P(on_tissue) descending naturally produces the three desired zones in order: (1) high-confidence on-tissue first, (2) uncertain ions in the middle (the model's "needs review" band, `ml_confidence < θ`), (3) high-confidence off-tissue at the end. Annotators who stop early after the confident on-tissue zone still get full coverage of the biology; the off-tissue tail can be skipped entirely. No frontend changes needed — ions arrive in a different order but the annotation UX is identical.
 
 6. **Fallback** — if scoring job fails or hasn't run, serve ions in existing `sort_order ASC` order. Log the failure for monitoring.
 
