@@ -43,11 +43,20 @@ async def _ingest_background(zip_bytes: bytes, dataset_id: uuid.UUID) -> None:
             dataset.error_msg = str(e)
             db.add(dataset)
             await db.commit()
+            return
         except Exception:
             dataset.status = "error"
             dataset.error_msg = "Unexpected error during ingestion."
             db.add(dataset)
             await db.commit()
+            return
+
+        # ML scoring — best-effort, never blocks dataset availability
+        try:
+            from app.services.ml_scoring import score_dataset
+            await score_dataset(dataset_id, db)
+        except Exception:
+            pass
 
 
 @router.get("/api/projects/{project_id}/datasets", response_model=list[DatasetOut])

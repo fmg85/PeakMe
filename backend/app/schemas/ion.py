@@ -18,6 +18,7 @@ class IonQueueItem(BaseModel):
     id: uuid.UUID
     mz_value: float
     sort_order: int
+    ml_score: float | None = None
     image_url: str          # presigned S3 URL
     tic_image_url: str | None = None
     is_starred: bool = False

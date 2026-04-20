@@ -12,3 +12,6 @@ boto3==1.35.80
 python-multipart==0.0.20
 aiofiles==24.1.0
 python-dotenv==1.0.1
+pillow==11.1.0
+numpy==2.2.1
+onnxruntime==1.20.1

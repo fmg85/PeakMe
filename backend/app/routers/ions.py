@@ -104,6 +104,7 @@ async def get_ion_queue(
             id=ion.id,
             mz_value=ion.mz_value,
             sort_order=ion.sort_order,
+            ml_score=ion.ml_score,
             image_url=generate_presigned_url(ion.image_key),
             tic_image_url=generate_presigned_url(ion.tic_image_key) if ion.tic_image_key else None,
             is_starred=ion.id in starred_ions,

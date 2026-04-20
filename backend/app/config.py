@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     # e.g. "https://peakme.vercel.app,http://localhost:5173"
     allowed_origins: str = "http://localhost:5173"
 
+    # ML scoring — set to the S3 key of the ONNX model to enable post-ingest scoring
+    # e.g. "research/results/model_mobilenet_v3_small.onnx"
+    ml_model_s3_key: str | None = None
+
     # App
     environment: str = "development"
 
