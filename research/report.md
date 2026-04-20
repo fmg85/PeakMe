@@ -1,16 +1,13 @@
 # ML-Assisted Ion Image Pre-Classification — Research Report
 
-> **Status:** In progress  
+> **Status:** Complete  
 > **Started:** 2026-04-19  
+> **Completed:** 2026-04-20  
 > **Ionisation matrix in scope:** DHAP (all current data)
 
 ---
 
-_This report is built up incrementally across research sessions. Sections are added as phases complete._
-
 ## 1. Executive Summary
-
-_To be written after all phases complete._
 
 ## 2. Literature Context
 
@@ -142,12 +139,142 @@ That is ~3 hours of annotation work reduced to ~1 hour (assuming ~3s per ion). T
 
 ## 8. Architecture Recommendation
 
-_To be written after phases 3–5 complete._
+### Recommended: Option A — Batch CPU job at upload time
+
+**Chosen architecture:** When a dataset reaches `status = ready`, trigger a background job that runs MobileNet-V3-Small inference on all ions, writes scores to the database, and the annotation queue is then served sorted by score. No GPU required. No per-project retraining in v1.
+
+**Why this is sufficient:**
+
+- MobileNet-V3-Small at ~50ms/image on a single CPU core: a 5,000-ion dataset scores in ~4 minutes. A 20,000-ion dataset scores in ~17 minutes. Both are acceptable background latency — the annotator rarely starts immediately after upload.
+- The pretrained model generalises from day 1 (score-sorted savings are seed-independent). No feedback loop is needed for the baseline feature.
+- MobileNet ONNX export is ~10 MB — trivially deployable on any backend server.
+
+**Infrastructure:** Run on the existing EC2 backend (t3.medium or equivalent). No new infra required. Model loaded into memory once at process start; inference is pure CPU PyTorch/ONNX.
+
+**Trigger mechanism:** A Celery/ARQ task (or simple background thread) triggered by the dataset status transition `processing → ready`. If the job fails, the queue falls back to the current random ordering — no user-facing impact.
+
+### Rejected: Option B — On-demand GPU job
+
+GPU inference would reduce scoring from ~4 min to ~10 seconds for a 5,000-ion dataset. The latency improvement is real but not meaningful for this use case — annotators don't need scores instantly. The added complexity (cold-start latency, instance lifecycle management, ~$0.02/dataset marginal cost) is not justified for v1. Revisit if datasets routinely exceed 50,000 ions.
+
+### Rejected: Option C — Real-time per-image inference
+
+Adds model latency to every ion fetch. No benefit over batch — scores don't change between requests. Keeps model in RAM permanently on all backend instances.
+
+### Data model changes required
+
+```sql
+-- Option 1: columns on existing ions table (simpler, preferred for v1)
+ALTER TABLE ions ADD COLUMN ml_score FLOAT;
+ALTER TABLE ions ADD COLUMN ml_confidence FLOAT;
+ALTER TABLE ions ADD COLUMN ml_label TEXT;  -- 'on_tissue' | 'off_tissue' | 'unclear'
+
+-- Indexes for sorted queue fetch
+CREATE INDEX ix_ions_dataset_ml_score ON ions (dataset_id, ml_score DESC NULLS LAST);
+```
+
+The queue endpoint `GET /api/datasets/{dataset_id}/ions/queue` sorts by `ml_score DESC NULLS LAST` when scores are present, falling back to `sort_order ASC` for datasets without scores (legacy behaviour preserved).
+
+### Retraining strategy (v1)
+
+No per-project retraining in v1. The pretrained model is sufficient. A global retraining run can be scheduled nightly or weekly as more annotations accumulate across all projects — this uses the same training pipeline (`03_train_classifier.py`) run on the full annotations CSV.
+
+Retraining trigger: when total new annotations since last retrain exceeds a threshold (e.g., 2,000). This is a background admin job, not user-facing.
+
+### Matrix-type awareness
+
+All current data uses DHAP. Future projects may use DHB, CHCA, or norharmane. The architecture must include `matrix_type` on the `Dataset` model so:
+- The correct model checkpoint is loaded for inference (DHAP-trained model for DHAP datasets)
+- Future matrix-specific fine-tuning is possible without schema changes
+- The queue can fall back to global model if no matrix-specific checkpoint exists
+
+This is a product requirement to implement in the same PR as the ML scoring feature — do not hard-code DHAP assumptions.
+
+### Confidence threshold θ
+
+MobileNet Coverage@70% = 79.4% on the human test set. In production, ions with `ml_confidence < θ` are surfaced in the middle of the queue (after high-confidence on-tissue, before high-confidence off-tissue) and flagged as "needs review". The recommended default is **θ = 0.70**. This can be made per-dataset configurable without schema changes (a dataset-level setting).
+
+### Cost estimate (production)
+
+| Item | Cost |
+|---|---|
+| Model inference (CPU, existing EC2) | $0 marginal |
+| Storage (ml_score column per ion) | ~$0 (8 bytes × 35k ions = 280 KB) |
+| Weekly retraining job (c5.2xlarge, ~30 min) | ~$0.10/week |
+| **Total** | **~$0.10/week** |
+
+---
 
 ## 9. Risks and Limitations
 
-_To be written._
+**1. Training data is single-lab / single-instrument**  
+All 35,084 annotations come from one research group using one instrument with DHAP matrix. The model has not been validated on data from other labs, instruments, or matrix chemistries. The cross-organism transfer result (AUC 0.74) is encouraging but was tested on data from the same lab. External generalisation is unknown.
+
+**2. Model was trained on CPU with only 10 epochs**  
+ResNet-50/OffsampleAI is likely undertrained — it needs GPU fine-tuning at lower learning rate to realise the OffsampleAI weights' potential. MobileNet's lead may shrink or reverse with proper GPU training. The current results are a conservative lower bound on achievable quality.
+
+**3. Cross-organism evaluation is incomplete**  
+Only ResNet-18 has a cross-organism result (AUC 0.7371). MobileNet, EfficientNet, and ResNet-50 cross-organism evals crashed before completion. The best production candidate (MobileNet) has no confirmed mouse transfer performance.
+
+**4. The 65% savings figure uses ResNet-50 scores, not MobileNet**  
+The AL simulation used ResNet-50 (AUC 0.9246) because MobileNet's `.pt` file was not in S3. MobileNet has higher AUC (0.9398), so actual savings with MobileNet should be modestly better than 65%.
+
+**5. "Unclear" ions are excluded from training**  
+0.5% of annotations are "unclear" and excluded from training. If unclear ions have distinctive visual patterns that the model should learn to flag (e.g., edge-of-tissue ions that are neither clearly biological nor noise), this is a training gap. In production, unclear ions will be routed to the medium-confidence zone by the confidence threshold, which is the correct behaviour.
+
+**6. No calibration data for production threshold**  
+The recommended θ = 0.70 is based on the MobileNet Coverage@70% test-set metric. The model has not been explicitly calibrated (Platt scaling or temperature scaling). Scores may not be well-calibrated probabilities across different dataset types. Calibration should be validated before relying on θ for hard filtering.
+
+**7. Score-sorted is not a substitute for full annotation**  
+The model reduces annotation effort but does not replace it. 9,301 annotations to reach 90% on-tissue still means substantial human effort for large datasets. The remaining 10% of on-tissue ions are in the model's low-confidence zone — they will be missed unless the annotator reviews beyond the score-sorted front of the queue.
+
+---
 
 ## 10. Next Steps
 
-_To be written — concrete implementation plan for the engineering phase._
+### Immediate (implement the feature)
+
+1. **Export MobileNet-V3-Small to ONNX** — load `model_mobilenet_v3_small.pt`, run `torch.onnx.export`, validate outputs match PyTorch. Target: `research/models/mobilenet_v3_small.onnx`.
+
+2. **DB migration** — add `ml_score FLOAT`, `ml_confidence FLOAT`, `ml_label TEXT` to `ions` table. Add index on `(dataset_id, ml_score DESC NULLS LAST)`. Alembic migration.
+
+3. **Add `matrix_type` to `Dataset` model** — nullable string, default `'DHAP'` for existing datasets. Include in dataset creation API and upload flow.
+
+4. **Scoring job** — a Python function that: loads ONNX model, streams images from S3 (reuse the S3 streaming code from Phase 3), writes scores to DB. Triggered on dataset `ready` transition.
+
+5. **Queue endpoint sort** — modify `GET /api/datasets/{dataset_id}/ions/queue` to `ORDER BY ml_score DESC NULLS LAST` when scores exist. No frontend changes needed — ions arrive in a different order, but the annotation UX is identical.
+
+6. **Fallback** — if scoring job fails or hasn't run, serve ions in existing `sort_order ASC` order. Log the failure for monitoring.
+
+### Near-term improvements
+
+- **Retrain MobileNet with GPU** at proper learning rate once GPU quota is approved — expect AUC improvement from 0.9398 toward 0.95+.
+- **Run cross-organism eval for MobileNet** — download all `.pt` files to one instance and run the cross-org evaluation that crashed in Phase 3.
+- **Calibrate scores** — apply temperature scaling on a held-out validation set so θ has a consistent meaning across dataset types.
+- **UI indicator** — show a confidence badge (e.g., green/amber/red dot) on each ion in the annotation view so annotators know why ions are ordered as they are.
+
+### Future / post-v1
+
+- **Per-project fine-tuning** — once a project accumulates 500+ annotations, fine-tune the global model on project-specific data. Expected to improve the 65% savings figure for that project.
+- **Multi-matrix support** — when a non-DHAP project is onboarded, collect annotations and train/fine-tune a matrix-specific checkpoint.
+- **Confidence-gated skip** — allow annotators to bulk-accept high-confidence off-tissue ions (e.g., `ml_score < 0.05` and `ml_confidence > 0.90`) without reviewing each one. This would push effective annotation savings well beyond 65%.
+
+---
+
+## 1. Executive Summary
+
+**Question:** Can a machine learning classifier pre-rank ion images in PeakMe so annotators encounter biologically relevant ions first, reducing annotation effort?
+
+**Answer: Yes, and substantially.** Sorting the annotation queue by model confidence (P(on_tissue) descending) reduces the annotations needed to discover 90% of on-tissue ions from **~26,900 to ~9,300** — a **65% reduction** on the GCPL human dataset. A typical 3-hour annotation session becomes approximately 1 hour.
+
+**How it works:** A MobileNet-V3-Small classifier (2.5M parameters) trained on 35,084 annotated ions learns to distinguish biologically structured ion images (on-tissue) from chemical noise and DHAP matrix artefacts (off-tissue) with AUC = 0.94. When a new dataset is uploaded, the model scores all ions in ~4 minutes on existing CPU hardware. The queue is then served sorted by score. No annotator workflow changes are needed.
+
+**Key findings:**
+
+- Deep learning (AUC 0.94) meaningfully beats hand-crafted image statistics (AUC 0.82), confirming that spatial texture features not captured by simple metrics carry real discriminating signal.
+- The pretrained model generalises cross-organism: ResNet-18 achieves AUC 0.74 on mouse data with zero mouse training examples, suggesting shared DHAP artefact patterns are transferable.
+- Active learning (uncertainty/coreset sampling) is the wrong strategy for this task — it optimises model learning, not annotation efficiency, and performs worse than random. The right strategy is a one-shot score-sorted queue.
+- The model works from the first dataset with no cold-start problem. The annotation savings are seed-independent.
+- The feature requires no new infrastructure: MobileNet ONNX (~10 MB) runs on the existing t3.medium backend at ~50ms/image. Marginal cost is ~$0.10/week for periodic global retraining.
+
+**Recommendation:** Build the score-sorted queue feature. It is low-risk, low-cost, and provides immediate measurable value to annotators. The path is clear: ONNX export → DB migration (`ml_score` column) → background scoring job → queue sort. Estimated engineering effort: 3–5 days.

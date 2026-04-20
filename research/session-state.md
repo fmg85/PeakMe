@@ -10,10 +10,10 @@
 
 | Field | Value |
 |---|---|
-| **Active phase** | Phase 5 — Operational Architecture Analysis |
+| **Active phase** | **COMPLETE** — all phases done |
 | **Last updated** | 2026-04-20 |
-| **Last session outcome** | Phase 4 complete. AL simulation run on i-0c5e23dbd4cd45665 (c5.2xlarge, terminated). Key finding: score-sorted ordering reduces annotations to reach 90% on-tissue from 26,901 → 9,301 (65% savings). Uncertainty/coreset AL worse than random — wrong strategy for this task. |
-| **Next immediate action** | Write Phase 5 (operational architecture) + Phase 6 (final report) sections. No more EC2 needed — these are analysis/writing phases. |
+| **Last session outcome** | Phases 5 + 6 written. report.md is complete. Recommendation: build score-sorted queue; 65% annotation savings; ~3-5 days engineering effort. No EC2 running. |
+| **Next immediate action** | Hand off to engineering: ONNX export → DB migration → scoring job → queue sort endpoint. See report.md section 10. |
 
 ---
 
@@ -227,5 +227,5 @@ Simulation run on 29,906 GCPL human ions using ResNet-50/OffsampleAI scores (AUC
 | 2 — Image statistics baseline | ✅ Complete | LogReg F1=0.7328, AUC=0.8158 — strong baseline without deep learning |
 | 3 — Transfer learning | ✅ Complete | MobileNet-V3-Small best (AUC 0.9398); all 4 models trained on CPU |
 | 4 — Active learning simulation | ✅ Complete | Score-sorted: 9,301 annotations for 90% on-tissue (65% savings vs random 26,901). Uncertainty/coreset worse than random. |
-| 5 — Operational analysis | ⏳ Pending | — |
-| 6 — Research report | ⏳ Pending | — |
+| 5 — Operational analysis | ✅ Complete | Option A (batch CPU job) recommended; no GPU needed; ~$0.10/week opex |
+| 6 — Research report | ✅ Complete | report.md complete; recommendation: build score-sorted queue, 3-5 days effort |
