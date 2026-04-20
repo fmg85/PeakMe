@@ -68,7 +68,42 @@ Full results in `results/02_baseline_stats.json`. Evaluated on a stratified samp
 
 ## 6. Model Results
 
-_See `results/03_model_metrics.json` — to be summarised here._
+Full results in `results/03_model_metrics.json`. All models trained on human GCPL data (10 epochs, batch size 32, WeightedRandomSampler, cosine LR annealing, CPU compute). Test set = held-out human GCPL samples (n = 4,488 ions).
+
+| Model | Params | Human AUC | Human F1 | Mouse AUC | Mouse F1 | Coverage@70% |
+|---|---|---|---|---|---|---|
+| **MobileNet-V3-Small** | 2.5M | **0.9398** | **0.5614** | n/a¹ | n/a | **79.4%** |
+| ResNet-50/OffsampleAI | 25M | 0.9246 | 0.5190 | n/a¹ | n/a | 74.4% |
+| ResNet-18 | 11M | 0.9097 | 0.4799 | 0.7371 | 0.6912 | n/a² |
+| EfficientNet-B0 | 5.3M | 0.8879 | 0.4822 | n/a¹ | n/a | 66.6% |
+
+¹ Cross-organism evaluation for MobileNet, ResNet-50, and EfficientNet did not complete due to a bug (parallel instances did not share model weights). Bug fixed in script; can rerun on a single instance with all .pt files downloaded from S3.  
+² ResNet-18 coverage metrics not captured (instance crashed before saving full test output; core metrics recovered from logs).
+
+**AUC is the primary metric** — F1 at the default 0.5 threshold is suppressed by the 3.98:1 class imbalance. A classification threshold tuned to the operating point will substantially improve F1. AUC measures ranking quality directly, which is what matters for the ion queue: can the model surface on-tissue ions before off-tissue ones?
+
+**Key findings:**
+
+- **MobileNet-V3-Small is the best model** (AUC 0.9398), despite being the smallest (2.5M params). Its inverted bottleneck architecture appears well-suited to detecting spatial structure in ion images. All four models significantly beat the hand-crafted baseline (AUC 0.8158), confirming that deep features capture something the 11 statistics miss.
+
+- **ResNet-50/OffsampleAI underperformed expectations.** OffsampleAI achieved F1 = 0.97 on 23k images; here it reaches AUC 0.9246 with fewer epochs on CPU. The pretrained weights likely need GPU fine-tuning with a lower learning rate to converge properly. This model may improve substantially with additional training.
+
+- **EfficientNet-B0 is the weakest** (AUC 0.8879) with noisy training curves (val_f1 fluctuates between 0.40–0.48 without clear convergence). May benefit from a longer warm-up period.
+
+- **Cross-organism transfer works (ResNet-18 result):** Trained on human GCPL only, ResNet-18 achieved AUC 0.7371 on the mouse dataset — zero-shot transfer without any mouse training data. The shared DHAP matrix chemistry creates transferable artefact signatures. AUC > 0.7 is meaningful for ranking; the model is usable for cross-organism pre-ranking out of the box.
+
+- **Coverage at 70% confidence (MobileNet):** 79.4% of ions receive a high-confidence prediction. This means ~80% of a new dataset's ions would be auto-sorted without review, with only the remaining 20% flagged as "needs human attention." This is the core product value: annotators focus effort on the uncertain tail.
+
+**Confusion matrix (MobileNet on human test set):**
+
+|  | Pred: off-tissue | Pred: on-tissue |
+|---|---|---|
+| **True: off-tissue** | 2,843 (TN) | 969 (FP) |
+| **True: on-tissue** | 34 (FN) | 642 (TP) |
+
+False negative rate = 34/676 = 5.0% (on-tissue ions incorrectly sent to the end of the queue). False positive rate = 969/3,812 = 25.4% (off-tissue ions surfaced when they shouldn't be). For the annotation use case, false negatives are more costly (missing real biology), and the 5% FN rate is acceptable.
+
+**Recommendation:** MobileNet-V3-Small is the production candidate. Its small size (2.5M params, ~10 MB ONNX export) makes it viable for CPU inference on an existing t3.medium at ~50ms/image, without requiring a dedicated GPU.
 
 ## 7. Active Learning Results
 

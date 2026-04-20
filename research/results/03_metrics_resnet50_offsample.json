@@ -1,0 +1,63 @@
+{
+  "model_name": "resnet50_offsample",
+  "best_val_f1": 0.5075,
+  "test_metrics": {
+    "f1": 0.519,
+    "auc": 0.9246,
+    "n": 4488,
+    "confusion_matrix": [
+      [
+        2679,
+        1133
+      ],
+      [
+        42,
+        634
+      ]
+    ],
+    "coverage_at_60": 0.8763,
+    "coverage_at_70": 0.7444,
+    "coverage_at_80": 0.5804,
+    "coverage_at_90": 0.3534
+  },
+  "history": {
+    "train_loss": [
+      0.297,
+      0.2818,
+      0.2759,
+      0.2694,
+      0.2585,
+      0.2575,
+      0.2501,
+      0.2447,
+      0.2436,
+      0.237
+    ],
+    "val_f1": [
+      0.4111,
+      0.4445,
+      0.4537,
+      0.3655,
+      0.5038,
+      0.5075,
+      0.4476,
+      0.4282,
+      0.4191,
+      0.397
+    ],
+    "val_auc": [
+      0.9026,
+      0.9087,
+      0.9099,
+      0.9096,
+      0.9148,
+      0.9151,
+      0.9149,
+      0.9151,
+      0.916,
+      0.9162
+    ]
+  },
+  "model_path": "/home/ubuntu/research_results/model_resnet50_offsample.pt",
+  "cross_organism": null
+}

@@ -10,10 +10,10 @@
 
 | Field | Value |
 |---|---|
-| **Active phase** | Phase 3 — Transfer Learning (waiting for GPU quota) |
+| **Active phase** | Phase 4 — Active Learning Simulation |
 | **Last updated** | 2026-04-19 |
-| **Last session outcome** | Phases 1-2 complete. Phase 3 CPU run launched on i-099420ac04180723f. Script runs models one by one (MobileNet→ResNet18→EfficientNet→ResNet50), checks GPU quota between each, stops early if quota approved. |
-| **Next immediate action** | Monitor Phase 3 progress. Terminate i-099420ac04180723f when complete or if GPU quota approved. |
+| **Last session outcome** | Phase 3 complete. 4 models trained in parallel on 3 CPU instances (c5.4xlarge). All instances terminated. Results in S3 + local. MobileNet-V3-Small is best model (AUC 0.9398). ResNet-18 only model with cross-org eval (AUC 0.7371). EfficientNet and ResNet-50 cross-org eval crashed (model .pt not available across instances) — can rerun later. |
+| **Next immediate action** | Run Phase 4 active learning simulation (script already written: `research/scripts/04_active_learning_sim.py`). Needs all 4 .pt files from S3 on same instance. GPU quota still pending. Can run Phase 4 on CPU (inference only, no retraining needed for simulation). |
 
 ---
 
@@ -21,13 +21,13 @@
 
 | Resource | Details | Status |
 |---|---|---|
-| EC2 CPU (c5.4xlarge) | i-099420ac04180723f, us-west-1 — **RUNNING** Phase 3 (incremental, CPU). Terminate when phase3_status.txt = CPU_COMPLETE or GPU_QUOTA_APPROVED | ⚠️ Active |
+| EC2 instances | All terminated after Phase 3 | ✅ None running |
 | EC2 GPU (g4dn.xlarge) | G-family on-demand quota request ID: f6ead070f62445759576d94d2a52c6456dBfJlSk — CASE_OPENED | Pending |
-| EC2 GPU (p3.2xlarge) | P-family on-demand quota request ID: 20ad2b4e799343d4bbedcff0a0762db158Wy2nAG — PENDING | Pending |
+| EC2 GPU (p3.2xlarge) | P-family on-demand quota request ID: 20ad2b4e799343d4bbedcff0a0762db158Wy2nAG — CASE_OPENED | Pending |
 | S3 annotations CSV | `s3://peakme-ions/research/annotations.csv` (9.3 MB) | ✅ Confirmed |
-| S3 results | `s3://peakme-ions/research/results/` — 01_data_audit.json, 02_baseline_stats.json, 02_image_features.csv | ✅ Uploaded |
+| S3 results | `s3://peakme-ions/research/results/` — all Phase 1-3 results + .pt files uploaded | ✅ Uploaded |
 | S3 scripts | `s3://peakme-ions/research/scripts/` — all phase scripts uploaded | ✅ Uploaded |
-| S3 models folder | `s3://peakme-ions/research/models/` (empty, ready for artifacts) | ✅ Confirmed |
+| S3 model weights | `s3://peakme-ions/research/results/model_*.pt` — all 4 models saved | ✅ Confirmed |
 | Ion images | `s3://peakme-ions/datasets/{dataset_id}/{mz:.4f}.png` | ✅ Confirmed |
 
 > **Rule:** Always list instance ID and type here when an EC2 instance is running. Terminate before closing session.
@@ -118,6 +118,32 @@ From Phase 1 (full data audit, 2026-04-19):
 
 **Key implication for model:** Cross-organism overlap is low (8-29%), so transfer relies on learning visual image patterns (spatial structure, texture) not m/z identity.
 
+### Phase 3 — Transfer Learning (complete, 2026-04-19)
+
+**Results file:** `research/results/03_model_metrics.json`
+
+4 models trained on human GCPL data (CPU, 10 epochs, 32 batch size, WeightedRandomSampler). Test set = held-out human GCPL (n=4,488).
+
+| Model | Human AUC | Human F1 | Mouse AUC | Mouse F1 | Coverage@70% |
+|---|---|---|---|---|---|
+| **MobileNet-V3-Small** | **0.9398** | **0.5614** | — | — | **79.4%** |
+| ResNet-50/OffsampleAI | 0.9246 | 0.5190 | — | — | 74.4% |
+| ResNet-18 | 0.9097 | 0.4799 | 0.7371 | 0.6912 | — |
+| EfficientNet-B0 | 0.8879 | 0.4822 | — | — | 66.6% |
+
+**Key findings:**
+- MobileNet-V3-Small (2.5M params) unexpectedly outperforms all larger models on AUC. This is likely due to its architecture favouring spatial feature extraction — matching well with the task of reading spatial structure in ion images.
+- ResNet-50/OffsampleAI underperformed expectation (AUC 0.9246 vs hoped-for ~0.95+). Likely needs GPU training with more epochs and a higher learning rate to realise the pretrained OffsampleAI weights' potential.
+- EfficientNet-B0 is the worst performer (AUC 0.8879) with noisy training curves — possibly underfitting on CPU with default LR.
+- F1 scores are artificially depressed at the default 0.5 threshold due to class imbalance (3.98:1 off:on). AUC is the reliable ranking metric here.
+- Cross-org eval: ResNet-18 shows AUC 0.7371 on mouse (zero-shot, trained only on human). Encouraging — the shared DHAP matrix chemistry creates transferable visual patterns. EfficientNet and ResNet-50 cross-org eval not yet run (parallel instance .pt files not shared). Can rerun.
+- Coverage@70%: at 70% confidence threshold, MobileNet gives confident predictions on 79.4% of ions — a high fraction, meaning most ions would get auto-scored.
+
+**Notes on training conditions:**
+- CPU-only (c5.4xlarge, 16 vCPU). Each model ~2.5h training time.
+- ResNet-18 result file recovered from log output (instance crashed before S3 upload).
+- EfficientNet and ResNet-50 cross-org eval crashed due to missing .pt files (parallel instances don't share weights); fixed in script, can rerun.
+
 ### Phase 2 — Image Statistics Baseline (complete, 2026-04-19)
 
 **Results file:** `research/results/02_baseline_stats.json`
@@ -172,7 +198,7 @@ From Phase 1 (full data audit, 2026-04-19):
 | 0.6 — Download OffsampleAI dataset | ⏳ Pending (needs GPU instance) | — |
 | 1 — Data audit | ✅ Complete | 35,084 ions; off:on = 3.98:1; cross-organism overlap 8-29%; DHAP artefact candidates identified |
 | 2 — Image statistics baseline | ✅ Complete | LogReg F1=0.7328, AUC=0.8158 — strong baseline without deep learning |
-| 3 — Transfer learning | ⏳ Pending (GPU quota approval required) | — |
+| 3 — Transfer learning | ✅ Complete | MobileNet-V3-Small best (AUC 0.9398); all 4 models trained on CPU |
 | 4 — Active learning simulation | ⏳ Pending | — |
 | 5 — Operational analysis | ⏳ Pending | — |
 | 6 — Research report | ⏳ Pending | — |

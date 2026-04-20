@@ -350,6 +350,9 @@ def eval_cross_organism(model_name: str, model_path: str, test_df: pd.DataFrame,
     ds = IonImageDataset(test_df, s3_client, bucket, val_transform, cache_dir)
     loader = DataLoader(ds, batch_size=args.batch_size, shuffle=False,
                         num_workers=args.workers, pin_memory=True)
+    if not os.path.exists(model_path):
+        print(f"  Skipping {model_name} cross-org — model file not found (different instance)")
+        return None
     model = build_model(model_name, offsample_path)
     model.load_state_dict(torch.load(model_path, map_location=device))
     model = model.to(device)
@@ -554,8 +557,9 @@ def main():
             r["model_name"], r["model_path"], test_mouse_df,
             s3, args.bucket, args, device, args.cache_dir, args.offsample_weights
         )
-        cross_org_results[r["model_name"]] = metrics
-        print(f"  {r['model_name']}: F1={metrics['f1']:.4f} AUC={metrics['auc']}")
+        if metrics is not None:
+            cross_org_results[r["model_name"]] = metrics
+            print(f"  {r['model_name']}: F1={metrics['f1']:.4f} AUC={metrics['auc']}")
 
     # Plots
     plot_calibration(all_results, out_dir)
