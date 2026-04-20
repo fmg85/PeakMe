@@ -1,71 +1,171 @@
 {
   "models_complete": [
+    "efficientnet_b0",
     "mobilenet_v3_small",
     "resnet50_offsample"
   ],
   "model_results": [
     {
-      "model_name": "mobilenet_v3_small",
-      "best_val_f1": 0.5638,
+      "model_name": "efficientnet_b0",
+      "best_val_f1": 0.4771,
       "test_metrics": {
-        "f1": 0.5614,
-        "auc": 0.9398,
+        "f1": 0.4822,
+        "auc": 0.8879,
         "n": 4488,
         "confusion_matrix": [
           [
-            2843,
-            969
+            2546,
+            1266
           ],
           [
-            34,
-            642
+            59,
+            617
           ]
         ],
-        "coverage_at_60": 0.9017,
-        "coverage_at_70": 0.7943,
-        "coverage_at_80": 0.6671,
-        "coverage_at_90": 0.4857
+        "coverage_at_60": 0.8443,
+        "coverage_at_70": 0.6658,
+        "coverage_at_80": 0.4744,
+        "coverage_at_90": 0.2531
       },
       "history": {
         "train_loss": [
+          0.296,
+          0.2805,
+          0.2785,
+          0.2748,
+          0.2761,
+          0.2737,
+          0.2762,
           0.274,
-          0.247,
-          0.2373,
-          0.2303,
-          0.2266,
-          0.2155,
-          0.2148,
-          0.2136,
-          0.202,
-          0.2037
+          0.2768,
+          0.2732
         ],
         "val_f1": [
-          0.5094,
-          0.4537,
-          0.4996,
-          0.5033,
-          0.5368,
-          0.4966,
-          0.521,
-          0.5638,
-          0.5405,
-          0.5326
+          0.4444,
+          0.4022,
+          0.4583,
+          0.4266,
+          0.4487,
+          0.4368,
+          0.4444,
+          0.4233,
+          0.4771,
+          0.4285
         ],
         "val_auc": [
-          0.9141,
-          0.9333,
-          0.937,
-          0.9378,
-          0.9422,
-          0.9428,
-          0.9425,
-          0.9444,
-          0.9445,
-          0.9447
+          0.8853,
+          0.8819,
+          0.889,
+          0.8929,
+          0.8894,
+          0.8904,
+          0.8961,
+          0.8986,
+          0.8856,
+          0.8941
+        ]
+      },
+      "model_path": "/home/ubuntu/research_results/model_efficientnet_b0.pt",
+      "cross_organism": {
+        "f1": 0.6687,
+        "auc": 0.6356,
+        "n": 4998,
+        "confusion_matrix": [
+          [
+            375,
+            2127
+          ],
+          [
+            174,
+            2322
+          ]
+        ],
+        "coverage_at_60": 0.9076,
+        "coverage_at_70": 0.8021,
+        "coverage_at_80": 0.6691,
+        "coverage_at_90": 0.4666
+      }
+    },
+    {
+      "model_name": "mobilenet_v3_small",
+      "best_val_f1": 0.5601,
+      "test_metrics": {
+        "f1": 0.5557,
+        "auc": 0.9283,
+        "n": 4488,
+        "confusion_matrix": [
+          [
+            2853,
+            959
+          ],
+          [
+            47,
+            629
+          ]
+        ],
+        "coverage_at_60": 0.8757,
+        "coverage_at_70": 0.7598,
+        "coverage_at_80": 0.5927,
+        "coverage_at_90": 0.3721
+      },
+      "history": {
+        "train_loss": [
+          0.2761,
+          0.254,
+          0.2357,
+          0.2309,
+          0.2209,
+          0.2264,
+          0.2225,
+          0.2167,
+          0.2061,
+          0.2106
+        ],
+        "val_f1": [
+          0.4248,
+          0.5601,
+          0.417,
+          0.5204,
+          0.5413,
+          0.5209,
+          0.532,
+          0.501,
+          0.531,
+          0.5319
+        ],
+        "val_auc": [
+          0.9294,
+          0.9358,
+          0.9358,
+          0.9353,
+          0.9386,
+          0.9421,
+          0.9431,
+          0.94,
+          0.9434,
+          0.9434
         ]
       },
       "model_path": "/home/ubuntu/research_results/model_mobilenet_v3_small.pt",
-      "cross_organism": null
+      "cross_organism": {
+        "f1": 0.6889,
+        "auc": 0.6908,
+        "n": 4998,
+        "confusion_matrix": [
+          [
+            703,
+            1799
+          ],
+          [
+            239,
+            2257
+          ]
+        ],
+        "coverage_at_60": 0.8191,
+        "coverage_at_70": 0.6399,
+        "coverage_at_80": 0.4334,
+        "coverage_at_90": 0.1931
+      }
     },
     {
       "model_name": "resnet50_offsample",
@@ -128,25 +228,109 @@
         ]
       },
       "model_path": "/home/ubuntu/research_results/model_resnet50_offsample.pt",
-      "cross_organism": null
+      "cross_organism": {
+        "f1": 0.6922,
+        "auc": 0.7485,
+        "n": 4998,
+        "confusion_matrix": [
+          [
+            1055,
+            1447
+          ],
+          [
+            409,
+            2087
+          ]
+        ],
+        "coverage_at_60": 0.8591,
+        "coverage_at_70": 0.7099,
+        "coverage_at_80": 0.546,
+        "coverage_at_90": 0.3371
+      }
     }
   ],
-  "cross_organism": {},
+  "cross_organism": {
+    "efficientnet_b0": {
+      "f1": 0.6687,
+      "auc": 0.6356,
+      "n": 4998,
+      "confusion_matrix": [
+        [
+          375,
+          2127
+        ],
+        [
+          174,
+          2322
+        ]
+      ],
+      "coverage_at_60": 0.9076,
+      "coverage_at_70": 0.8021,
+      "coverage_at_80": 0.6691,
+      "coverage_at_90": 0.4666
+    },
+    "mobilenet_v3_small": {
+      "f1": 0.6889,
+      "auc": 0.6908,
+      "n": 4998,
+      "confusion_matrix": [
+        [
+          703,
+          1799
+        ],
+        [
+          239,
+          2257
+        ]
+      ],
+      "coverage_at_60": 0.8191,
+      "coverage_at_70": 0.6399,
+      "coverage_at_80": 0.4334,
+      "coverage_at_90": 0.1931
+    },
+    "resnet50_offsample": {
+      "f1": 0.6922,
+      "auc": 0.7485,
+      "n": 4998,
+      "confusion_matrix": [
+        [
+          1055,
+          1447
+        ],
+        [
+          409,
+          2087
+        ]
+      ],
+      "coverage_at_60": 0.8591,
+      "coverage_at_70": 0.7099,
+      "coverage_at_80": 0.546,
+      "coverage_at_90": 0.3371
+    }
+  },
   "summary": [
     {
+      "model": "efficientnet_b0",
+      "val_f1": 0.4771,
+      "test_f1_human": 0.4822,
+      "test_auc_human": 0.8879,
+      "test_f1_mouse": 0.6687,
+      "coverage_70pct": 0.6658
+    },
+    {
       "model": "mobilenet_v3_small",
-      "val_f1": 0.5638,
-      "test_f1_human": 0.5614,
-      "test_auc_human": 0.9398,
-      "test_f1_mouse": null,
-      "coverage_70pct": 0.7943
+      "val_f1": 0.5601,
+      "test_f1_human": 0.5557,
+      "test_auc_human": 0.9283,
+      "test_f1_mouse": 0.6889,
+      "coverage_70pct": 0.7598
     },
     {
       "model": "resnet50_offsample",
       "val_f1": 0.5075,
       "test_f1_human": 0.519,
       "test_auc_human": 0.9246,
-      "test_f1_mouse": null,
+      "test_f1_mouse": 0.6922,
       "coverage_70pct": 0.7444
     }
   ]

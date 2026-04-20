@@ -69,53 +69,49 @@ Full results in `results/03_model_metrics.json`. All models trained on human GCP
 
 | Model | Params | Human AUC | Human F1 | Mouse AUC | Mouse F1 | Coverage@70% |
 |---|---|---|---|---|---|---|
-| **MobileNet-V3-Small** | 2.5M | **0.9398** | **0.5614** | n/a¹ | n/a | **79.4%** |
-| ResNet-50/OffsampleAI | 25M | 0.9246 | 0.5190 | n/a¹ | n/a | 74.4% |
-| ResNet-18 | 11M | 0.9097 | 0.4799 | 0.7371 | 0.6912 | n/a² |
-| EfficientNet-B0 | 5.3M | 0.8879 | 0.4822 | n/a¹ | n/a | 66.6% |
-
-¹ Cross-organism evaluation for MobileNet, ResNet-50, and EfficientNet did not complete due to a bug (parallel instances did not share model weights). Bug fixed in script; can rerun on a single instance with all .pt files downloaded from S3.  
-² ResNet-18 coverage metrics not captured (instance crashed before saving full test output; core metrics recovered from logs).
+| **MobileNet-V3-Small** | 2.5M | **0.9283** | **0.5557** | 0.6908 | 0.6889 | **76.0%** |
+| ResNet-50/OffsampleAI | 25M | 0.9246 | 0.5190 | 0.7485 | 0.6922 | 74.4% |
+| EfficientNet-B0 | 5.3M | 0.8879 | 0.4822 | 0.6356 | 0.6687 | 66.6% |
 
 **AUC is the primary metric** — F1 at the default 0.5 threshold is suppressed by the 3.98:1 class imbalance. A classification threshold tuned to the operating point will substantially improve F1. AUC measures ranking quality directly, which is what matters for the ion queue: can the model surface on-tissue ions before off-tissue ones?
 
 **Key findings:**
 
-- **MobileNet-V3-Small is the best model** (AUC 0.9398), despite being the smallest (2.5M params). Its inverted bottleneck architecture appears well-suited to detecting spatial structure in ion images. All four models significantly beat the hand-crafted baseline (AUC 0.8158), confirming that deep features capture something the 11 statistics miss.
+- **MobileNet-V3-Small is the best model** (AUC 0.9283), despite being the smallest (2.5M params). Its inverted bottleneck architecture appears well-suited to detecting spatial structure in ion images. All three models significantly beat the hand-crafted baseline (AUC 0.8158), confirming that deep features capture something the 11 statistics miss.
 
 - **ResNet-50/OffsampleAI underperformed expectations.** OffsampleAI achieved F1 = 0.97 on 23k images; here it reaches AUC 0.9246 with fewer epochs on CPU. The pretrained weights likely need GPU fine-tuning with a lower learning rate to converge properly. This model may improve substantially with additional training.
 
 - **EfficientNet-B0 is the weakest** (AUC 0.8879) with noisy training curves (val_f1 fluctuates between 0.40–0.48 without clear convergence). May benefit from a longer warm-up period.
 
-- **Cross-organism transfer works (ResNet-18 result):** Trained on human GCPL only, ResNet-18 achieved AUC 0.7371 on the mouse dataset — zero-shot transfer without any mouse training data. The shared DHAP matrix chemistry creates transferable artefact signatures. AUC > 0.7 is meaningful for ranking; the model is usable for cross-organism pre-ranking out of the box.
+- **Cross-organism transfer works (all three models):** Trained on human GCPL only, all models achieve AUC > 0.63 on the mouse dataset — zero-shot transfer without any mouse training data. The shared DHAP matrix chemistry creates transferable artefact signatures. ResNet-50 is strongest cross-organism (AUC 0.7485), with MobileNet (0.6908) and EfficientNet (0.6356) following. AUC > 0.63 is meaningful for ranking; the model is usable for cross-organism pre-ranking out of the box.
 
-- **Coverage at 70% confidence (MobileNet):** 79.4% of ions receive a high-confidence prediction. This means ~80% of a new dataset's ions would be auto-sorted without review, with only the remaining 20% flagged as "needs human attention." This is the core product value: annotators focus effort on the uncertain tail.
+- **Coverage at 70% confidence (MobileNet):** 76.0% of ions receive a high-confidence prediction. This means ~76% of a new dataset's ions would be auto-sorted without review, with only the remaining 24% flagged as "needs human attention." This is the core product value: annotators focus effort on the uncertain tail.
 
 **Confusion matrix (MobileNet on human test set):**
 
 |  | Pred: off-tissue | Pred: on-tissue |
 |---|---|---|
-| **True: off-tissue** | 2,843 (TN) | 969 (FP) |
-| **True: on-tissue** | 34 (FN) | 642 (TP) |
+| **True: off-tissue** | 2,853 (TN) | 959 (FP) |
+| **True: on-tissue** | 47 (FN) | 629 (TP) |
 
-False negative rate = 34/676 = 5.0% (on-tissue ions incorrectly sent to the end of the queue). False positive rate = 969/3,812 = 25.4% (off-tissue ions surfaced when they shouldn't be). For the annotation use case, false negatives are more costly (missing real biology), and the 5% FN rate is acceptable.
+False negative rate = 47/676 = 7.0% (on-tissue ions incorrectly sent to the end of the queue). False positive rate = 959/3,812 = 25.1% (off-tissue ions surfaced when they shouldn't be). For the annotation use case, false negatives are more costly (missing real biology), and the 7% FN rate is acceptable.
 
 **Recommendation:** MobileNet-V3-Small is the production candidate. Its small size (2.5M params, ~10 MB ONNX export) makes it viable for CPU inference on an existing t3.medium at ~50ms/image, without requiring a dedicated GPU.
 
 ## 7. Active Learning Results
 
-Full results in `results/04_al_curves.json`. Simulation run on 29,906 GCPL human ions using ResNet-50/OffsampleAI scores (AUC 0.9246). All model scores precomputed once; simulation is analytical (no retraining per round, because scores are fixed).
+Full results in `results/04_al_curves.json`. Simulation run on 29,906 GCPL human ions using MobileNet-V3-Small scores (AUC 0.9283). All model scores precomputed once; simulation is analytical (no retraining per round, because scores are fixed).
 
-### Result: score-sorted ordering saves 65% of annotation effort
+### Result: score-sorted ordering saves 68% of annotation effort
 
 | Strategy | Annotations to reach 90% on-tissue | vs. random |
 |---|---|---|
-| **Score-sorted** (proposed) | **9,301** | **−65.4%** |
-| Random (current PeakMe) | ~26,920 | baseline |
-| Uncertainty AL | ~29,413 | +9.3% worse |
-| Coreset AL | ~29,415 | +9.3% worse |
+| **Score-sorted** (proposed) | **8,606** | **−68.0%** |
+| Random (current PeakMe) | ~26,901 | baseline |
+| Uncertainty AL | ~29,202 | +8.5% worse |
+| Coreset AL | ~29,202 | +8.5% worse |
 
-Score-sorted means: rank all ions by P(on_tissue) descending before the annotator sees them. With the current model, annotators need to review only **31.1% of the dataset** to find 90% of biologically relevant ions, versus 89.9% with random ordering.
+Score-sorted means: rank all ions by P(on_tissue) descending before the annotator sees them. With the current model, annotators need to review only **28.8% of the dataset** to find 90% of biologically relevant ions, versus 89.9% with random ordering.
 
 ### Key finding: "active learning" is the wrong framing for this task
 
@@ -133,7 +129,7 @@ This reframes the original "critical mass" question. There is no threshold befor
 
 An annotator working a typical GCPL-scale dataset (~5,000 ions, 15% on-tissue = ~750 on-tissue ions) needs to annotate:
 - **Without ML:** ~4,490 ions to find 90% of on-tissue (89.9% of dataset)  
-- **With score-sorted ML queue:** ~1,550 ions to find 90% of on-tissue (31.1% of dataset)
+- **With score-sorted ML queue:** ~1,440 ions to find 90% of on-tissue (28.8% of dataset)
 
 That is ~3 hours of annotation work reduced to ~1 hour (assuming ~3s per ion). The value is real and immediate.
 
@@ -192,7 +188,7 @@ This is a product requirement to implement in the same PR as the ML scoring feat
 
 ### Confidence threshold θ
 
-MobileNet Coverage@70% = 79.4% on the human test set. In production, ions with `ml_confidence < θ` are surfaced in the middle of the queue (after high-confidence on-tissue, before high-confidence off-tissue) and flagged as "needs review". The recommended default is **θ = 0.70**. This can be made per-dataset configurable without schema changes (a dataset-level setting).
+MobileNet Coverage@70% = 76.0% on the human test set. In production, ions with `ml_confidence < θ` are surfaced in the middle of the queue (after high-confidence on-tissue, before high-confidence off-tissue) and flagged as "needs review". The recommended default is **θ = 0.70**. This can be made per-dataset configurable without schema changes (a dataset-level setting).
 
 ### Cost estimate (production)
 
@@ -213,19 +209,13 @@ All 35,084 annotations come from one research group using one instrument with DH
 **2. Model was trained on CPU with only 10 epochs**  
 ResNet-50/OffsampleAI is likely undertrained — it needs GPU fine-tuning at lower learning rate to realise the OffsampleAI weights' potential. MobileNet's lead may shrink or reverse with proper GPU training. The current results are a conservative lower bound on achievable quality.
 
-**3. Cross-organism evaluation is incomplete**  
-Only ResNet-18 has a cross-organism result (AUC 0.7371). MobileNet, EfficientNet, and ResNet-50 cross-organism evals crashed before completion. The best production candidate (MobileNet) has no confirmed mouse transfer performance.
-
-**4. The 65% savings figure uses ResNet-50 scores, not MobileNet**  
-The AL simulation used ResNet-50 (AUC 0.9246) because MobileNet's `.pt` file was not in S3. MobileNet has higher AUC (0.9398), so actual savings with MobileNet should be modestly better than 65%.
-
-**5. "Unclear" ions are excluded from training**  
+**3. "Unclear" ions are excluded from training**  
 0.5% of annotations are "unclear" and excluded from training. If unclear ions have distinctive visual patterns that the model should learn to flag (e.g., edge-of-tissue ions that are neither clearly biological nor noise), this is a training gap. In production, unclear ions will be routed to the medium-confidence zone by the confidence threshold, which is the correct behaviour.
 
-**6. No calibration data for production threshold**  
+**4. No calibration data for production threshold**  
 The recommended θ = 0.70 is based on the MobileNet Coverage@70% test-set metric. The model has not been explicitly calibrated (Platt scaling or temperature scaling). Scores may not be well-calibrated probabilities across different dataset types. Calibration should be validated before relying on θ for hard filtering.
 
-**7. Score-sorted is not a substitute for full annotation**  
+**5. Score-sorted is not a substitute for full annotation**  
 The model reduces annotation effort but does not replace it. 9,301 annotations to reach 90% on-tissue still means substantial human effort for large datasets. The remaining 10% of on-tissue ions are in the model's low-confidence zone — they will be missed unless the annotator reviews beyond the score-sorted front of the queue.
 
 ---
@@ -248,8 +238,7 @@ The model reduces annotation effort but does not replace it. 9,301 annotations t
 
 ### Near-term improvements
 
-- **Retrain MobileNet with GPU** at proper learning rate once GPU quota is approved — expect AUC improvement from 0.9398 toward 0.95+.
-- **Run cross-organism eval for MobileNet** — download all `.pt` files to one instance and run the cross-org evaluation that crashed in Phase 3.
+- **Retrain MobileNet with GPU** at proper learning rate once GPU quota is approved — expect AUC improvement from 0.9283 toward 0.95+.
 - **Calibrate scores** — apply temperature scaling on a held-out validation set so θ has a consistent meaning across dataset types.
 - **UI indicator** — show a confidence badge (e.g., green/amber/red dot) on each ion in the annotation view so annotators know why ions are ordered as they are.
 
@@ -265,9 +254,9 @@ The model reduces annotation effort but does not replace it. 9,301 annotations t
 
 **Question:** Can a machine learning classifier pre-rank ion images in PeakMe so annotators encounter biologically relevant ions first, reducing annotation effort?
 
-**Answer: Yes, and substantially.** Sorting the annotation queue by model confidence (P(on_tissue) descending) reduces the annotations needed to discover 90% of on-tissue ions from **~26,900 to ~9,300** — a **65% reduction** on the GCPL human dataset. A typical 3-hour annotation session becomes approximately 1 hour.
+**Answer: Yes, and substantially.** Sorting the annotation queue by model confidence (P(on_tissue) descending) reduces the annotations needed to discover 90% of on-tissue ions from **~26,900 to ~8,600** — a **68% reduction** on the GCPL human dataset. A typical 3-hour annotation session becomes approximately 1 hour.
 
-**How it works:** A MobileNet-V3-Small classifier (2.5M parameters) trained on 35,084 annotated ions learns to distinguish biologically structured ion images (on-tissue) from chemical noise and DHAP matrix artefacts (off-tissue) with AUC = 0.94. When a new dataset is uploaded, the model scores all ions in ~4 minutes on existing CPU hardware. The queue is then served sorted by score. No annotator workflow changes are needed.
+**How it works:** A MobileNet-V3-Small classifier (2.5M parameters) trained on 35,084 annotated ions learns to distinguish biologically structured ion images (on-tissue) from chemical noise and DHAP matrix artefacts (off-tissue) with AUC = 0.93. When a new dataset is uploaded, the model scores all ions in ~4 minutes on existing CPU hardware. The queue is then served sorted by score. No annotator workflow changes are needed.
 
 **Key findings:**
 

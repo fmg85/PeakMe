@@ -16,8 +16,9 @@ echo "=== Phase 3b: MobileNet retrain + cross-org + AL sim ==="
 date
 
 echo "--- Installing deps ---"
-pip3 install -q torch torchvision --index-url https://download.pytorch.org/whl/cpu
-pip3 install -q scikit-learn boto3 pandas pillow matplotlib scipy
+apt-get install -y python3-pip -q 2>&1 | tail -3 || true
+pip3 install -q --break-system-packages torch torchvision --index-url https://download.pytorch.org/whl/cpu
+pip3 install -q --break-system-packages scikit-learn boto3 pandas pillow matplotlib scipy
 
 echo "--- Downloading scripts ---"
 mkdir -p "$RESULTS" "$DATA" "$CACHE" "$SCRIPTS"
@@ -34,6 +35,22 @@ aws s3 sync "s3://$BUCKET/research/results/" "$RESULTS/" --region "$REGION" --ex
 echo "--- Downloading existing model weights (efnet + resnet50) ---"
 aws s3 cp "s3://$BUCKET/research/results/model_efficientnet_b0.pt" "$RESULTS/model_efficientnet_b0.pt" --region "$REGION"
 aws s3 cp "s3://$BUCKET/research/results/model_resnet50_offsample.pt" "$RESULTS/model_resnet50_offsample.pt" --region "$REGION"
+
+echo "--- Removing stale MobileNet results to force retrain ---"
+rm -f "$RESULTS/03_metrics_mobilenet_v3_small.json"
+# Also remove mobilenet from combined JSON (it references model_name, not model)
+python3 - << 'PYEOF'
+import json, os
+path = os.path.expanduser("~/research_results/03_model_metrics.json")
+if os.path.exists(path):
+    with open(path) as f:
+        d = json.load(f)
+    d["models_complete"] = [m for m in d.get("models_complete", []) if m != "mobilenet_v3_small"]
+    d["model_results"] = [m for m in d.get("model_results", []) if m.get("model_name") != "mobilenet_v3_small"]
+    with open(path, "w") as f:
+        json.dump(d, f, indent=2)
+    print("Removed mobilenet from combined JSON. Remaining:", d["models_complete"])
+PYEOF
 
 echo "--- Step 1: Train MobileNet-V3-Small (10 epochs) ---"
 python3 "$SCRIPTS/03_train_classifier.py" \

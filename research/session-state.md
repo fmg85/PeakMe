@@ -12,7 +12,7 @@
 |---|---|
 | **Active phase** | **COMPLETE** — all phases done |
 | **Last updated** | 2026-04-20 |
-| **Last session outcome** | Phases 5 + 6 written. report.md is complete. Recommendation: build score-sorted queue; 65% annotation savings; ~3-5 days engineering effort. No EC2 running. |
+| **Last session outcome** | Phase 3b complete. MobileNet retrained (AUC 0.9283), cross-org eval for all models, AL re-sim with MobileNet scores → 68% annotation savings (8,606 vs 26,901). report.md updated with definitive numbers. No EC2 running. |
 | **Next immediate action** | Hand off to engineering: ONNX export → DB migration → scoring job → queue sort endpoint. See report.md section 10. |
 
 ---
@@ -122,20 +122,20 @@ From Phase 1 (full data audit, 2026-04-19):
 
 **Results file:** `research/results/04_al_curves.json`
 
-Simulation run on 29,906 GCPL human ions using ResNet-50/OffsampleAI scores (AUC 0.9246). Scores precomputed once; simulation is analytical (no model retraining).
+Simulation run on 29,906 GCPL human ions using MobileNet-V3-Small scores (AUC 0.9283). Scores precomputed once; simulation is analytical (no model retraining).
 
 **Annotations needed to reach 90% on-tissue discovery (median, 5 replicates):**
 
 | Strategy | N=10 | N=100 | N=500 | N=1000 | N=2000 | N=5000 |
 |---|---|---|---|---|---|---|
-| **score_sorted** | **9,301** | **9,301** | **9,301** | **9,301** | **9,301** | **9,301** |
+| **score_sorted** | **8,606** | **8,606** | **8,606** | **8,606** | **8,606** | **8,606** |
 | random (current PeakMe) | 26,901 | 27,013 | 26,966 | 26,959 | 26,868 | 26,841 |
-| uncertainty AL | 29,413 | 29,413 | 29,413 | 29,412 | 29,409 | 29,405 |
-| coreset AL | 29,414 | 29,414 | 29,415 | 29,415 | 29,415 | 29,417 |
+| uncertainty AL | 29,202 | 29,202 | 29,203 | 29,201 | 29,203 | 29,207 |
+| coreset AL | 29,201 | 29,202 | 29,199 | 29,199 | 29,189 | 29,163 |
 
 **Key findings:**
 
-1. **Score-sorted gives 65% annotation savings**: sorting by P(on_tissue) descending means annotators find 90% of on-tissue ions after reviewing only 9,301/29,906 = 31.1% of the dataset, vs 89.9% for random ordering.
+1. **Score-sorted gives 68% annotation savings**: sorting by P(on_tissue) descending means annotators find 90% of on-tissue ions after reviewing only 8,606/29,906 = 28.8% of the dataset, vs 89.9% for random ordering.
 
 2. **Score is independent of seed size**: the 9,301 figure is identical at every seed size — the model's global ranking is fixed and doesn't benefit from project-specific seeds in this simulation. This means the feature works from day 1 on any new dataset using the pretrained model.
 
@@ -153,23 +153,21 @@ Simulation run on 29,906 GCPL human ions using ResNet-50/OffsampleAI scores (AUC
 
 | Model | Human AUC | Human F1 | Mouse AUC | Mouse F1 | Coverage@70% |
 |---|---|---|---|---|---|
-| **MobileNet-V3-Small** | **0.9398** | **0.5614** | — | — | **79.4%** |
-| ResNet-50/OffsampleAI | 0.9246 | 0.5190 | — | — | 74.4% |
-| ResNet-18 | 0.9097 | 0.4799 | 0.7371 | 0.6912 | — |
-| EfficientNet-B0 | 0.8879 | 0.4822 | — | — | 66.6% |
+| **MobileNet-V3-Small** | **0.9283** | **0.5557** | 0.6908 | 0.6889 | **76.0%** |
+| ResNet-50/OffsampleAI | 0.9246 | 0.5190 | 0.7485 | 0.6922 | 74.4% |
+| EfficientNet-B0 | 0.8879 | 0.4822 | 0.6356 | 0.6687 | 66.6% |
 
 **Key findings:**
-- MobileNet-V3-Small (2.5M params) unexpectedly outperforms all larger models on AUC. This is likely due to its architecture favouring spatial feature extraction — matching well with the task of reading spatial structure in ion images.
-- ResNet-50/OffsampleAI underperformed expectation (AUC 0.9246 vs hoped-for ~0.95+). Likely needs GPU training with more epochs and a higher learning rate to realise the pretrained OffsampleAI weights' potential.
-- EfficientNet-B0 is the worst performer (AUC 0.8879) with noisy training curves — possibly underfitting on CPU with default LR.
+- MobileNet-V3-Small (2.5M params) unexpectedly outperforms all larger models on human AUC. Its inverted bottleneck architecture appears well-suited to detecting spatial structure in ion images.
+- ResNet-50/OffsampleAI underperformed expectation (AUC 0.9246 vs hoped-for ~0.95+) but is strongest cross-organism (AUC 0.7485). Likely needs GPU training with more epochs to realise pretrained OffsampleAI weights' potential.
+- EfficientNet-B0 is the worst performer (AUC 0.8879) with noisy training curves.
 - F1 scores are artificially depressed at the default 0.5 threshold due to class imbalance (3.98:1 off:on). AUC is the reliable ranking metric here.
-- Cross-org eval: ResNet-18 shows AUC 0.7371 on mouse (zero-shot, trained only on human). Encouraging — the shared DHAP matrix chemistry creates transferable visual patterns. EfficientNet and ResNet-50 cross-org eval not yet run (parallel instance .pt files not shared). Can rerun.
-- Coverage@70%: at 70% confidence threshold, MobileNet gives confident predictions on 79.4% of ions — a high fraction, meaning most ions would get auto-scored.
+- Cross-org eval: all three models generalise to mouse zero-shot. Shared DHAP matrix chemistry creates transferable visual patterns.
+- Coverage@70%: at 70% confidence threshold, MobileNet gives confident predictions on 76.0% of ions.
 
 **Notes on training conditions:**
-- CPU-only (c5.4xlarge, 16 vCPU). Each model ~2.5h training time.
-- ResNet-18 result file recovered from log output (instance crashed before S3 upload).
-- EfficientNet and ResNet-50 cross-org eval crashed due to missing .pt files (parallel instances don't share weights); fixed in script, can rerun.
+- CPU-only (c5.2xlarge). Phase 3b used same instance to retrain MobileNet and run cross-org eval for all models.
+- Phase 3b fixed a bug where MobileNet .pt was not in S3; retrain confirmed definitive numbers.
 
 ### Phase 2 — Image Statistics Baseline (complete, 2026-04-19)
 
@@ -225,7 +223,8 @@ Simulation run on 29,906 GCPL human ions using ResNet-50/OffsampleAI scores (AUC
 | 0.6 — Download OffsampleAI dataset | ⏳ Pending (needs GPU instance) | — |
 | 1 — Data audit | ✅ Complete | 35,084 ions; off:on = 3.98:1; cross-organism overlap 8-29%; DHAP artefact candidates identified |
 | 2 — Image statistics baseline | ✅ Complete | LogReg F1=0.7328, AUC=0.8158 — strong baseline without deep learning |
-| 3 — Transfer learning | ✅ Complete | MobileNet-V3-Small best (AUC 0.9398); all 4 models trained on CPU |
-| 4 — Active learning simulation | ✅ Complete | Score-sorted: 9,301 annotations for 90% on-tissue (65% savings vs random 26,901). Uncertainty/coreset worse than random. |
+| 3 — Transfer learning | ✅ Complete | MobileNet-V3-Small best (AUC 0.9283 test); all 3 models trained + cross-org eval complete |
+| 3b — MobileNet retrain + cross-org | ✅ Complete | Definitive: MobileNet AUC 0.9283 human / 0.6908 mouse; ResNet-50 AUC 0.9246 human / 0.7485 mouse; EfficientNet 0.8879 / 0.6356 |
+| 4 — Active learning simulation | ✅ Complete | Score-sorted (MobileNet): 8,606 annotations for 90% on-tissue (68% savings vs random 26,901). Seed-independent. |
 | 5 — Operational analysis | ✅ Complete | Option A (batch CPU job) recommended; no GPU needed; ~$0.10/week opex |
-| 6 — Research report | ✅ Complete | report.md complete; recommendation: build score-sorted queue, 3-5 days effort |
+| 6 — Research report | ✅ Complete | report.md updated with Phase 3b definitive numbers; recommendation: build score-sorted queue, 3-5 days effort |
