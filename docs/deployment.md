@@ -176,6 +176,23 @@ workflow exits with an error — check the Actions log.
 > secrets (AWS keys, Supabase JWT secret), SSH into EC2 and update `.env` manually,
 > then run `docker compose restart api`.
 
+### Enabling ML scoring (optional)
+
+After deploying, add the following to `.env` on EC2 to enable automatic ion ranking
+after each dataset upload:
+
+```
+ML_MODEL_S3_KEY=research/results/model_mobilenet_v3_small.onnx
+```
+
+Then restart: `docker compose restart api`
+
+When set, MobileNet-V3-Small runs inference on all ion images after ingestion and
+rewrites `ions.sort_order` so annotators see biologically relevant ions first (~68%
+annotation savings vs. random order). If unset, ions appear in original upload order.
+The EC2 instance IAM role needs `s3:GetObject` on the `peakme-ions` bucket (already
+required for ion image access).
+
 The workflow also runs on a **nightly schedule (03:00 UTC)** as a catch-up mechanism:
 if a push-triggered deploy failed (e.g. during an EC2 reboot), the server will
 self-heal within 24 hours. It skips the rebuild if EC2 is already on the latest commit.

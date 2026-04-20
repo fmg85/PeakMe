@@ -5,6 +5,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## 2026-04-20
+
+- feat: ML score-sorted ion queue — after a dataset ingests, MobileNet-V3-Small (AUC 0.9283) ranks all ions by P(on_tissue) so annotators see biologically relevant ions first; saves ~68% of annotation effort vs. random order
+- feat: `ml_score` field exposed on `GET /api/datasets/{id}/ions/queue` response
+- feat: `matrix_type` column added to datasets (defaults to DHAP) for future non-DHAP support
+
 ## 2026-04-01
 
 - fix: display name now synced from Google JWT (full_name) on login when the stored name is still the auto-generated email prefix
