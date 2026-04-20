@@ -12,11 +12,17 @@ Compares:
 Each condition: 5 bootstrap replicates with different random seeds.
 Best model from Phase 3 used for inference.
 
+Optimisation: model scores are precomputed once for all images, then
+simulation is done analytically (no re-inference per round). This is
+correct because no model retraining occurs during the simulation —
+scores are fixed, so the uncertainty ordering is deterministic after
+the initial seed selection.
+
 Usage:
     python 04_active_learning_sim.py \
         --csv /data/annotations.csv \
-        --model-path /data/results/model_resnet50_offsample.pt \
-        --model-name resnet50_offsample \
+        --model-path /data/results/model_mobilenet_v3_small.pt \
+        --model-name mobilenet_v3_small \
         --bucket peakme-ions \
         --region us-west-1 \
         --out /data/results/ \
@@ -156,84 +162,56 @@ def coreset_select(features: np.ndarray, n: int, rng: np.random.Generator) -> li
 
 # ── AL simulation ─────────────────────────────────────────────────────────────
 
-def simulate_al(df: pd.DataFrame, model: nn.Module, s3_client, bucket: str,
-                device: torch.device, args, cache_dir: Path,
+def _build_curve(order: np.ndarray, labels: np.ndarray, on_tissue_total: int) -> list[dict]:
+    """Build a discovery curve given a presentation order (indices into labels)."""
+    curve = []
+    on_found = 0
+    for step, i in enumerate(order):
+        if labels[i] == 1:
+            on_found += 1
+        curve.append({"n_annotated": step + 1, "n_on_tissue": on_found,
+                      "pct_on_tissue": round(on_found / on_tissue_total * 100, 2)})
+    return curve
+
+
+def simulate_al(labels: np.ndarray, all_probs: np.ndarray,
                 seed_size: int, strategy: str, rng_seed: int) -> dict:
     """
-    Simulate one AL run.
-    Returns: discovery curve as list of (n_annotated, n_on_tissue_found).
+    Simulate one AL run using precomputed model scores (no re-inference).
+
+    Since no model retraining occurs, scores are fixed — uncertainty ordering
+    is deterministic after seed selection. The entire simulation is analytical.
+
+    labels: 0/1 array (on_tissue=1) for the full dataset
+    all_probs: P(on_tissue) for each ion, precomputed once
     """
     rng = np.random.default_rng(rng_seed)
-    all_idx = np.arange(len(df))
-    on_tissue_total = int((df["label_norm"] == "on_tissue").sum())
+    n = len(labels)
+    on_tissue_total = int(labels.sum())
+    all_idx = np.arange(n)
 
     if strategy == "random":
-        # Current PeakMe: shuffle order, present sequentially
         order = rng.permutation(all_idx)
-        curve = []
-        on_found = 0
-        for step, i in enumerate(order):
-            if df.iloc[i]["label_norm"] == "on_tissue":
-                on_found += 1
-            curve.append({"n_annotated": step + 1, "n_on_tissue": on_found,
-                           "pct_on_tissue": round(on_found / on_tissue_total * 100, 2)})
-        return {"curve": curve, "on_tissue_total": on_tissue_total}
+        return {"curve": _build_curve(order, labels, on_tissue_total),
+                "on_tissue_total": on_tissue_total}
 
-    # AL strategies: start with seed, then iterative
-    annotated_mask = np.zeros(len(df), dtype=bool)
-    on_found = 0
-    curve = []
+    # Entropy of binary distribution: higher = more uncertain
+    entropy = -(all_probs * np.log(all_probs + 1e-8)
+                + (1 - all_probs) * np.log(1 - all_probs + 1e-8))
 
-    # Phase 1: seed selection
     if strategy == "coreset":
-        # Use image keys as proxy features (sorted by m/z gives a rough spectrum of m/z diversity)
-        # Better: use softmax probs from pretrained model as 1D feature
-        seed_probs = score_images(model, df["image_key"].tolist(), s3_client, bucket,
-                                  device, args.batch_size, args.workers, cache_dir)
-        feat = seed_probs.reshape(-1, 1)
-        seed_idx = coreset_select(feat, seed_size, rng)
-    else:
-        # Uncertainty sampling: start with random seed
-        seed_idx = rng.choice(all_idx, size=seed_size, replace=False).tolist()
+        feat = all_probs.reshape(-1, 1)
+        seed_idx = np.array(coreset_select(feat, seed_size, rng))
+    else:  # uncertainty: random seed
+        seed_idx = rng.choice(all_idx, size=seed_size, replace=False)
 
-    for i in seed_idx:
-        annotated_mask[i] = True
-        if df.iloc[i]["label_norm"] == "on_tissue":
-            on_found += 1
-    curve.append({"n_annotated": int(annotated_mask.sum()),
-                  "n_on_tissue": on_found,
-                  "pct_on_tissue": round(on_found / on_tissue_total * 100, 2)})
+    remaining = np.setdiff1d(all_idx, seed_idx)
+    # Present remaining in decreasing entropy order (most uncertain first)
+    remaining_sorted = remaining[np.argsort(entropy[remaining])[::-1]]
+    order = np.concatenate([seed_idx, remaining_sorted])
 
-    # Phase 2: iterative AL (uncertainty sampling)
-    unannotated_idx = np.where(~annotated_mask)[0]
-    rounds = 0
-    max_rounds = 200  # safety limit
-
-    while len(unannotated_idx) > 0 and rounds < max_rounds:
-        # Score unannotated images
-        unannotated_keys = df.iloc[unannotated_idx]["image_key"].tolist()
-        probs = score_images(model, unannotated_keys, s3_client, bucket,
-                             device, args.batch_size, args.workers, cache_dir)
-
-        # Uncertainty = entropy of [p, 1-p]
-        entropy = -(probs * np.log(probs + 1e-8) + (1 - probs) * np.log(1 - probs + 1e-8))
-        query_n = min(QUERY_BATCH, len(unannotated_idx))
-        top_uncertain = np.argsort(entropy)[-query_n:]
-        selected_global = unannotated_idx[top_uncertain]
-
-        for i in selected_global:
-            annotated_mask[i] = True
-            if df.iloc[i]["label_norm"] == "on_tissue":
-                on_found += 1
-
-        curve.append({"n_annotated": int(annotated_mask.sum()),
-                      "n_on_tissue": on_found,
-                      "pct_on_tissue": round(on_found / on_tissue_total * 100, 2)})
-
-        unannotated_idx = np.where(~annotated_mask)[0]
-        rounds += 1
-
-    return {"curve": curve, "on_tissue_total": on_tissue_total}
+    return {"curve": _build_curve(order, labels, on_tissue_total),
+            "on_tissue_total": on_tissue_total}
 
 
 # ── Aggregate + plot ──────────────────────────────────────────────────────────
@@ -329,7 +307,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--csv", required=True)
     parser.add_argument("--model-path", required=True)
-    parser.add_argument("--model-name", default="resnet50_offsample")
+    parser.add_argument("--model-name", default="mobilenet_v3_small")
     parser.add_argument("--bucket", default="peakme-ions")
     parser.add_argument("--region", default="us-west-1")
     parser.add_argument("--out", default="results")
@@ -360,6 +338,14 @@ def main():
     s3 = boto3.client("s3", region_name=args.region)
     model = load_model(args.model_name, args.model_path, device)
 
+    # Precompute ALL scores once — simulation is then analytical (no re-inference)
+    print(f"\nPrecomputing scores for {len(human_df)} ions (once)...")
+    all_probs = score_images(model, human_df["image_key"].tolist(), s3, args.bucket,
+                             device, args.batch_size, args.workers, cache_dir)
+    print(f"Done. Score range: [{all_probs.min():.3f}, {all_probs.max():.3f}]")
+
+    labels = (human_df["label_norm"] == "on_tissue").astype(int).values
+
     STRATEGIES = ["random", "coreset", "uncertainty"]
     all_runs: dict = {s: {} for s in STRATEGIES}
 
@@ -373,10 +359,7 @@ def main():
             for rep in range(N_REPLICATES):
                 rng_seed = 42 + rep * 1000 + seed_n
                 print(f"  {strategy} rep {rep+1}/{N_REPLICATES}...", end=" ", flush=True)
-                result = simulate_al(
-                    human_df, model, s3, args.bucket, device, args,
-                    cache_dir, seed_n, strategy, rng_seed
-                )
+                result = simulate_al(labels, all_probs, seed_n, strategy, rng_seed)
                 replicates.append(result)
                 print(f"done ({result['curve'][-1]['n_on_tissue']}"
                       f"/{result['on_tissue_total']} on-tissue found)")
