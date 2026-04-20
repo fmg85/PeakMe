@@ -365,6 +365,8 @@ def plot_calibration(results: list[dict], out_dir: Path) -> None:
     fig, ax = plt.subplots(figsize=(8, 6))
     ax.plot([0, 1], [0, 1], "k--", label="Perfect calibration")
     for r in results:
+        if "_probs" not in r or "_labels" not in r:
+            continue  # skip models loaded from disk (probs stripped on save)
         probs = np.array(r["_probs"])
         labels = np.array(r["_labels"])
         frac_pos, mean_pred = calibration_curve(labels, probs, n_bins=10)
@@ -382,6 +384,8 @@ def plot_calibration(results: list[dict], out_dir: Path) -> None:
 def plot_training_curves(results: list[dict], out_dir: Path) -> None:
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
     for r in results:
+        if "history" not in r:
+            continue  # skip models loaded from disk
         axes[0].plot(r["history"]["train_loss"], label=r["model_name"])
         axes[1].plot(r["history"]["val_f1"], label=r["model_name"])
     axes[0].set_title("Training loss")
