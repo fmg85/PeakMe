@@ -10,10 +10,10 @@
 
 | Field | Value |
 |---|---|
-| **Active phase** | **COMPLETE** — all phases done |
+| **Active phase** | **COMPLETE** — all phases done, ONNX exported |
 | **Last updated** | 2026-04-20 |
-| **Last session outcome** | Phase 3b complete. MobileNet retrained (AUC 0.9283), cross-org eval for all models, AL re-sim with MobileNet scores → 68% annotation savings (8,606 vs 26,901). report.md updated with definitive numbers. No EC2 running. |
-| **Next immediate action** | Hand off to engineering: ONNX export → DB migration → scoring job → queue sort endpoint. See report.md section 10. |
+| **Last session outcome** | Phase 3b complete + engineering implementation done. ONNX model exported (6.1 MB) to `s3://peakme-ions/research/results/model_mobilenet_v3_small.onnx`. Backend changes committed: DB migration (ml_score col, matrix_type col, composite index), ml_scoring.py service, ingest hook, IonQueueItem schema update. Set `ML_MODEL_S3_KEY=research/results/model_mobilenet_v3_small.onnx` on EC2 to enable scoring. |
+| **Next immediate action** | Deploy to EC2, set `ML_MODEL_S3_KEY` env var, upload a test dataset to verify end-to-end scoring. |
 
 ---
 
@@ -21,13 +21,14 @@
 
 | Resource | Details | Status |
 |---|---|---|
-| EC2 instances | All terminated after Phase 4 | ✅ None running |
+| EC2 instances | All terminated | ✅ None running |
 | EC2 GPU (g4dn.xlarge) | G-family on-demand quota request ID: f6ead070f62445759576d94d2a52c6456dBfJlSk — CASE_OPENED | Pending |
 | EC2 GPU (p3.2xlarge) | P-family on-demand quota request ID: 20ad2b4e799343d4bbedcff0a0762db158Wy2nAG — CASE_OPENED | Pending |
 | S3 annotations CSV | `s3://peakme-ions/research/annotations.csv` (9.3 MB) | ✅ Confirmed |
 | S3 results | `s3://peakme-ions/research/results/` — all Phase 1-3 results + .pt files uploaded | ✅ Uploaded |
 | S3 scripts | `s3://peakme-ions/research/scripts/` — all phase scripts uploaded | ✅ Uploaded |
 | S3 model weights | `s3://peakme-ions/research/results/model_*.pt` — all 4 models saved | ✅ Confirmed |
+| S3 ONNX model | `s3://peakme-ions/research/results/model_mobilenet_v3_small.onnx` (6.1 MB) | ✅ Exported 2026-04-20 |
 | Ion images | `s3://peakme-ions/datasets/{dataset_id}/{mz:.4f}.png` | ✅ Confirmed |
 
 > **Rule:** Always list instance ID and type here when an EC2 instance is running. Terminate before closing session.
