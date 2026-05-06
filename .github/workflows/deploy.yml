@@ -39,4 +39,7 @@ jobs:
               echo "EC2 is up to date ($(git rev-parse --short HEAD)) — skipping rebuild"
               # Still verify health even if no deploy was needed
               curl -sf http://localhost:8000/health || (echo "Health check failed" && exit 1)
+              # Keepalive: pings DB with SELECT 1 to prevent Supabase free-tier pause.
+              # Non-fatal — a slow wakeup after an unexpected pause shouldn't break the deploy.
+              curl -sf --max-time 60 http://localhost:8000/keepalive || echo "DB keepalive slow or failed (non-fatal)"
             fi

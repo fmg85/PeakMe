@@ -1,7 +1,10 @@
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.database import get_db
 from app.routers import auth, projects, labels, datasets, ions, annotations, instructions
 from app.routers.annotations import global_router
 
@@ -32,3 +35,10 @@ app.include_router(instructions.router)
 @app.get("/health", tags=["health"])
 async def health():
     return {"status": "ok", "version": "0.1.0"}
+
+
+@app.get("/keepalive", tags=["health"], include_in_schema=False)
+async def keepalive(db: AsyncSession = Depends(get_db)):
+    """Ping the DB with SELECT 1 — called nightly to prevent Supabase free-tier pause."""
+    await db.execute(text("SELECT 1"))
+    return {"alive": True}
