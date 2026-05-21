@@ -5,6 +5,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## 2026-05-21
+
+- fix: reduce gunicorn workers from 4 to 2 to prevent OOM crash on t3.small (1.9GB RAM); ML model loaded per-worker was exhausting memory
+
 ## 2026-04-20
 
 - feat: ML score-sorted ion queue — after a dataset ingests, MobileNet-V3-Small (AUC 0.9283) ranks all ions by P(on_tissue) so annotators see biologically relevant ions first; saves ~68% of annotation effort vs. random order
