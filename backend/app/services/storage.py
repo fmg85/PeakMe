@@ -64,6 +64,26 @@ def generate_presigned_url(key: str, expires_in: int = 3600) -> str:
     )
 
 
+def generate_presigned_upload_url(key: str, expires_in: int = 3600) -> str:
+    """Generate a presigned S3 PUT URL for direct browser-to-S3 uploads."""
+    return get_s3_client().generate_presigned_url(
+        "put_object",
+        Params={"Bucket": settings.aws_s3_bucket, "Key": key},
+        ExpiresIn=expires_in,
+    )
+
+
+def download_file(key: str) -> bytes:
+    """Download a file from S3 and return its raw bytes."""
+    response = get_s3_client().get_object(Bucket=settings.aws_s3_bucket, Key=key)
+    return response["Body"].read()
+
+
+def delete_file(key: str) -> None:
+    """Delete a single S3 object."""
+    get_s3_client().delete_object(Bucket=settings.aws_s3_bucket, Key=key)
+
+
 def delete_dataset_images(dataset_id: uuid.UUID) -> None:
     """Delete all images for a dataset from S3."""
     client = get_s3_client()

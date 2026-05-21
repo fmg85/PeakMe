@@ -1,7 +1,7 @@
 import asyncio
 import uuid
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status  # noqa: F401 — File/Form/UploadFile used by reference-images endpoint
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,12 +13,32 @@ from app.models.ion import Ion
 from app.models.project import Project
 from app.schemas.dataset import DatasetLabelSummary, DatasetOut, LabelCount
 from app.services.ingest import IngestError, ingest_zip
-from app.services.storage import delete_dataset_images, generate_presigned_url, upload_file
+from app.services.storage import (
+    delete_dataset_images,
+    delete_file,
+    download_file,
+    generate_presigned_upload_url,
+    generate_presigned_url,
+    upload_file,
+)
+from pydantic import BaseModel
 
 router = APIRouter(tags=["datasets"])
 
 MAX_ZIP_SIZE = 2 * 1024 * 1024 * 1024  # 2 GB
 MAX_REF_IMAGE_SIZE = 50 * 1024 * 1024  # 50 MB
+
+
+class PrepareUploadIn(BaseModel):
+    project_id: uuid.UUID
+    name: str
+    description: str | None = None
+    sample_type: str | None = None
+
+
+class PrepareUploadOut(BaseModel):
+    dataset_id: uuid.UUID
+    upload_url: str
 
 
 def _dataset_out(dataset: Dataset, my_annotation_count: int = 0) -> DatasetOut:
@@ -31,13 +51,16 @@ def _dataset_out(dataset: Dataset, my_annotation_count: int = 0) -> DatasetOut:
     return out
 
 
-async def _ingest_background(zip_bytes: bytes, dataset_id: uuid.UUID) -> None:
-    """Run ingestion in a fresh DB session after the HTTP response is sent."""
+async def _ingest_background_from_s3(s3_key: str, dataset_id: uuid.UUID) -> None:
+    """Download ZIP from S3, ingest it, then delete the temporary upload object."""
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(Dataset).where(Dataset.id == dataset_id))
         dataset = result.scalar_one()
+        loop = asyncio.get_running_loop()
         try:
+            zip_bytes = await loop.run_in_executor(None, download_file, s3_key)
             await ingest_zip(zip_bytes, dataset, db)
+            await loop.run_in_executor(None, delete_file, s3_key)
         except IngestError as e:
             dataset.status = "error"
             dataset.error_msg = str(e)
@@ -87,40 +110,63 @@ async def list_datasets(
     return [_dataset_out(d, counts.get(d.id, 0)) for d in datasets]
 
 
-@router.post("/api/datasets/upload", response_model=DatasetOut, status_code=status.HTTP_202_ACCEPTED)
-async def upload_dataset(
-    background_tasks: BackgroundTasks,
+@router.post("/api/datasets/prepare-upload", response_model=PrepareUploadOut)
+async def prepare_upload(
+    body: PrepareUploadIn,
     current_user: CurrentUser,
-    project_id: uuid.UUID = Form(...),
-    name: str = Form(...),
-    description: str | None = Form(default=None),
-    sample_type: str | None = Form(default=None),
-    file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(Project).where(Project.id == project_id))
+    """
+    Step 1 of 3: create dataset record and return a presigned S3 PUT URL.
+    The client uploads the ZIP directly to S3, then calls POST /ingest.
+    """
+    result = await db.execute(select(Project).where(Project.id == body.project_id))
     if not result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Project not found")
 
-    # Read and validate file size before creating the DB record
-    zip_bytes = await file.read()
-    if len(zip_bytes) > MAX_ZIP_SIZE:
-        raise HTTPException(status_code=422, detail="ZIP file exceeds 2 GB limit.")
-
-    # Create the dataset record immediately so the UI can show "processing"
     dataset = Dataset(
-        project_id=project_id,
-        name=name,
-        description=description,
-        sample_type=sample_type,
-        status="processing",
+        project_id=body.project_id,
+        name=body.name,
+        description=body.description,
+        sample_type=body.sample_type,
+        status="pending",
     )
     db.add(dataset)
     await db.commit()
     await db.refresh(dataset)
 
-    # Kick off ingestion after the response is sent
-    background_tasks.add_task(_ingest_background, zip_bytes, dataset.id)
+    s3_key = f"uploads/{dataset.id}/source.zip"
+    loop = asyncio.get_running_loop()
+    upload_url = await loop.run_in_executor(None, generate_presigned_upload_url, s3_key)
+
+    return PrepareUploadOut(dataset_id=dataset.id, upload_url=upload_url)
+
+
+@router.post("/api/datasets/{dataset_id}/ingest", response_model=DatasetOut, status_code=status.HTTP_202_ACCEPTED)
+async def trigger_ingest(
+    dataset_id: uuid.UUID,
+    current_user: CurrentUser,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Step 3 of 3: after the client has uploaded the ZIP to S3, trigger ingestion.
+    Downloads from S3, runs ingest + ML scoring in the background.
+    """
+    result = await db.execute(select(Dataset).where(Dataset.id == dataset_id))
+    dataset = result.scalar_one_or_none()
+    if not dataset:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    if dataset.status != "pending":
+        raise HTTPException(status_code=409, detail=f"Dataset is '{dataset.status}', expected 'pending'")
+
+    dataset.status = "processing"
+    db.add(dataset)
+    await db.commit()
+    await db.refresh(dataset)
+
+    s3_key = f"uploads/{dataset_id}/source.zip"
+    background_tasks.add_task(_ingest_background_from_s3, s3_key, dataset_id)
 
     return _dataset_out(dataset, 0)
 

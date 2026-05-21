@@ -7,6 +7,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## 2026-05-21
 
+- feat: upload ZIPs directly to S3 via presigned URLs, bypassing Vercel's request body size limit; large datasets now upload reliably
+
+## 2026-05-21 (2)
+
 - fix: reduce gunicorn workers from 4 to 2 to prevent OOM crash on t3.small (1.9GB RAM); ML model loaded per-worker was exhausting memory
 
 ## 2026-04-20

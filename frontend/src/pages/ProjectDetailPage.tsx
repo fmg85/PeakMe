@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query'
+import axios from 'axios'
 import apiClient from '../lib/apiClient'
 import type { Dataset, DatasetLabelSummary, LabelOption, Project } from '../lib/types'
 
@@ -155,26 +156,38 @@ export default function ProjectDetailPage() {
     setUploading(true)
     setUploadProgress(0)
     setUploadError(null)
-    const form = new FormData()
-    form.append('project_id', projectId!)
-    form.append('name', datasetName)
-    if (datasetDesc) form.append('description', datasetDesc)
-    if (sampleType) form.append('sample_type', sampleType)
-    form.append('file', file)
+    let datasetId: string | null = null
     try {
-      await apiClient.post('/api/datasets/upload', form, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+      // Step 1: create DB record + get presigned S3 URL
+      const { data } = await apiClient.post('/api/datasets/prepare-upload', {
+        project_id: projectId,
+        name: datasetName,
+        description: datasetDesc || undefined,
+        sample_type: sampleType || undefined,
+      })
+      datasetId = data.dataset_id
+
+      // Step 2: upload directly to S3 — bypasses Vercel entirely
+      await axios.put(data.upload_url, file, {
         onUploadProgress: (e) => {
           if (e.total) setUploadProgress(Math.round((e.loaded / e.total) * 100))
         },
       })
+
+      // Step 3: trigger ingestion on the backend
+      await apiClient.post(`/api/datasets/${datasetId}/ingest`)
+
       queryClient.invalidateQueries({ queryKey: ['datasets', projectId] })
       setDatasetName('')
       setDatasetDesc('')
       setSampleType('')
       if (fileRef.current) fileRef.current.value = ''
     } catch (err: any) {
-      setUploadError(err.response?.data?.detail || 'Upload failed')
+      // Clean up the orphaned pending dataset record if upload or ingest call failed
+      if (datasetId) {
+        try { await apiClient.delete(`/api/datasets/${datasetId}`) } catch {}
+      }
+      setUploadError(err.response?.data?.detail || err.message || 'Upload failed')
     } finally {
       setUploading(false)
       setUploadProgress(null)
