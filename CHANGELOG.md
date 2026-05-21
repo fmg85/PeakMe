@@ -13,6 +13,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - fix: reduce gunicorn workers from 4 to 2 to prevent OOM crash on t3.small (1.9GB RAM); ML model loaded per-worker was exhausting memory
 
+## 2026-05-21 (3)
+
+- fix: `peakme_import.R` v1.5.0 — ZIP now uses flat layout (files at archive root); absolute-path output dirs no longer produce unreadable archives that fail on upload
+- feat: `peakme_import.R` v1.5.0 — new `--sort-by mz|mean|max|freq` argument; annotators now see highest-intensity (or most-detected) ions first instead of lowest m/z first
+
 ## 2026-04-20
 
 - feat: ML score-sorted ion queue — after a dataset ingests, MobileNet-V3-Small (AUC 0.9283) ranks all ions by P(on_tissue) so annotators see biologically relevant ions first; saves ~68% of annotation effort vs. random order

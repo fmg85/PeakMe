@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 # =============================================================================
-# PeakMe: Cardinal MSI → PNG Export Script  [version 1.4.2 · 2026-03-30]
+# PeakMe: Cardinal MSI → PNG Export Script  [version 1.5.0 · 2026-05-21]
 # =============================================================================
 # Exports each m/z feature in an MSImagingExperiment as a PNG image and writes
 # a metadata.csv manifest. The output folder can be zipped and uploaded to
@@ -65,7 +65,8 @@ if (interactive()) {
     export_tic = TRUE,       # TRUE = generate a TIC spectrum PNG per ion image
                              # (adds time to export; included in the ZIP)
     tic_window = 0.5,        # ± Da window around each ion's m/z in TIC plot
-    tic_labels = 5L          # number of highest peaks to label with their m/z
+    tic_labels = 5L,         # number of highest peaks to label with their m/z
+    sort_by    = "mz"        # swipe queue order: "mz" | "mean" | "max" | "freq"
   )
 } else {
   # ---------------------------------------------------------------------------
@@ -113,6 +114,10 @@ if (interactive()) {
     make_option("--tic-labels",
       type = "integer", default = 5L,
       help = "Number of highest peaks to label with m/z in TIC plot [default: 5]"
+    ),
+    make_option("--sort-by",
+      type = "character", default = "mz",
+      help = "Swipe queue order: mz (default), mean, max, freq [default: mz]"
     )
   )
 
@@ -126,6 +131,7 @@ if (interactive()) {
   args$export_tic <- !args[["no-tic"]]
   args$tic_window <- args[["tic-window"]]
   args$tic_labels <- args[["tic-labels"]]
+  args$sort_by    <- args[["sort-by"]]
   args$msi_file   <- args$file
 
   if (is.null(args$msi_file)) {
@@ -204,6 +210,11 @@ if (!inherits(msi, "MSImagingExperiment")) {
 }
 
 message("  Dimensions: ", ncol(msi), " pixels · ", length(mz(msi)), " m/z features")
+
+valid_sorts <- c("mz", "mean", "max", "freq")
+if (!args$sort_by %in% valid_sorts) {
+  stop("--sort-by must be one of: ", paste(valid_sorts, collapse = ", "), call. = FALSE)
+}
 
 # ---------------------------------------------------------------------------
 # Normalization
@@ -284,6 +295,30 @@ if (args$export_tic) {
   } else {
     message("  Note: TIC spectrum export skipped — dataset too large to materialise.")
     args$export_tic <- FALSE
+  }
+}
+
+# ── Reorder features by sort_by criterion ────────────────────────────────────
+# PeakMe populates the swipe queue in metadata.csv row order, so sorting here
+# controls which ions annotators see first.
+if (args$sort_by != "mz") {
+  if (!exists("int_mat")) {
+    message("  --sort-by '", args$sort_by, "' requires a materialised intensity matrix.")
+    message("  Dataset too large; falling back to sort-by='mz'.")
+  } else {
+    message("  Sorting features by '", args$sort_by, "' (descending)…")
+    sort_key <- switch(args$sort_by,
+      "mean" = if (exists("mean_spec")) mean_spec else rowMeans(int_mat, na.rm = TRUE),
+      "max"  = apply(int_mat, 1, max, na.rm = TRUE),
+      "freq" = rowSums(int_mat != 0, na.rm = TRUE) / ncol(int_mat)
+    )
+    ord       <- order(-sort_key)
+    mz_values <- mz_values[ord]
+    int_mat   <- int_mat[ord, , drop = FALSE]
+    if (exists("mean_spec")) mean_spec <- mean_spec[ord]
+    get_row   <- function(i) int_mat[i, ]
+    message(sprintf("  Reordered: top ion is m/z %.4f (%s = %.3g)",
+                    mz_values[1], args$sort_by, sort_key[ord[1]]))
   }
 }
 
@@ -475,19 +510,28 @@ for (i in seq_along(mz_values)) {
 metadata      <- do.call(rbind, metadata_rows)
 metadata_path <- file.path(args$output, "metadata.csv")
 write.csv(metadata, metadata_path, row.names = FALSE)
-message("  Wrote metadata.csv (", nrow(metadata), " ions)")
+message("  Wrote metadata.csv (", nrow(metadata), " ions in '", args$sort_by, "' order)")
 
 # ---------------------------------------------------------------------------
 # Optional zip
 # ---------------------------------------------------------------------------
 if (args$zip) {
-  zip_path <- paste0(args$output, ".zip")
-  message("  Creating zip: ", zip_path)
-  zip(zip_path, files = args$output, flags = "-r9q")
+  zip_path   <- paste0(args$output, ".zip")
+  abs_output <- normalizePath(args$output)
+  abs_zip    <- file.path(dirname(abs_output), basename(zip_path))
+  message("  Creating zip (flat layout): ", zip_path)
+  # Zip from inside the output folder so files land at the archive root
+  # (bare filenames like 1000.4202.png). Zipping the folder by absolute path
+  # embeds the full filesystem path in the archive, which PeakMe cannot parse.
+  old_wd <- getwd()
+  on.exit(setwd(old_wd), add = TRUE)
+  setwd(abs_output)
+  zip(abs_zip, files = list.files("."), flags = "-r9q")
+  setwd(old_wd)
   message("  Done. Upload '", basename(zip_path), "' to PeakMe.")
 } else {
   message("  Done. Zip the '", basename(args$output), "/' folder and upload to PeakMe.")
   message("  Quick zip command:")
   message("    cd ", dirname(normalizePath(args$output)),
-          " && zip -r ", basename(args$output), ".zip ", basename(args$output), "/")
+          " && zip -j ", basename(args$output), ".zip ", args$output, "/*")
 }

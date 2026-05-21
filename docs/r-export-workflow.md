@@ -77,7 +77,8 @@ Rscript peakme_import.R \
 | `--height` | `720` | Image height in pixels |
 | `--colormap` | `viridis` | Color scale: `viridis`, `magma`, `plasma`, `inferno`, `cividis` |
 | `--normalize` | `rms` | Normalization: `tic`, `rms`, `none` |
-| `--zip` | off | Automatically zip the output folder |
+| `--zip` | off | Automatically zip the output folder (files land at the archive root — safe to upload directly) |
+| `--sort-by` | `mz` | Swipe queue order: `mz` (m/z ascending), `mean` (mean intensity desc), `max` (peak max desc), `freq` (detection frequency desc) |
 
 ---
 
