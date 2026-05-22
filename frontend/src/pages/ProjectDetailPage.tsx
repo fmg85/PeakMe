@@ -168,7 +168,9 @@ export default function ProjectDetailPage() {
       datasetId = data.dataset_id
 
       // Step 2: upload directly to S3 — bypasses Vercel entirely
+      // Content-Type must match what was signed into the presigned URL (application/zip)
       await axios.put(data.upload_url, file, {
+        headers: { 'Content-Type': 'application/zip' },
         onUploadProgress: (e) => {
           if (e.total) setUploadProgress(Math.round((e.loaded / e.total) * 100))
         },

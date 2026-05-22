@@ -65,10 +65,10 @@ def generate_presigned_url(key: str, expires_in: int = 3600) -> str:
 
 
 def generate_presigned_upload_url(key: str, expires_in: int = 3600) -> str:
-    """Generate a presigned S3 PUT URL for direct browser-to-S3 uploads."""
+    """Generate a presigned S3 PUT URL for direct browser-to-S3 ZIP uploads."""
     return get_s3_client().generate_presigned_url(
         "put_object",
-        Params={"Bucket": settings.aws_s3_bucket, "Key": key},
+        Params={"Bucket": settings.aws_s3_bucket, "Key": key, "ContentType": "application/zip"},
         ExpiresIn=expires_in,
     )
 
