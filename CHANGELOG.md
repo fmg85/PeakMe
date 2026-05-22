@@ -7,6 +7,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## 2026-05-22
 
+- feat: bulk dataset upload — select multiple ZIPs at once; each becomes a dataset named after its file, with per-file progress and status. Datasets upload **and** ingest one at a time (the queue waits for each to finish ingesting before starting the next) so the backend is never hit with parallel ingestions that overload it
 - fix: include `Content-Type` in the presigned S3 PUT signature so direct uploads no longer fail with a generic "network error" (browser sends `Content-Type` for the file; S3 rejects any header missing from the signature)
 - fix: raise the upload-flow API timeout (prepare-upload / ingest / cleanup) from 10s to 60s so uploads don't fail prematurely when the backend is busy ingesting other datasets
 

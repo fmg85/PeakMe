@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, type ChangeEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
@@ -18,6 +18,21 @@ const DIR_ARROW: Record<SwipeDir, string> = { left: '←', right: '→', up: '�
 // queue behind in-flight ingestions. Give them a longer timeout than the
 // default 10s (which is tuned for fast-failing read queries).
 const UPLOAD_API_TIMEOUT = 60000
+
+// Max time to wait for a single dataset to finish ingesting before moving on.
+const INGEST_WAIT_MS = 15 * 60 * 1000
+
+type QueueStatus = 'queued' | 'uploading' | 'processing' | 'done' | 'error'
+type QueueItem = {
+  id: string
+  file: File
+  name: string
+  status: QueueStatus
+  progress: number
+  error?: string
+}
+
+const stripZip = (filename: string) => filename.replace(/\.zip$/i, '')
 
 function DirectionPicker({
   value,
@@ -90,11 +105,10 @@ export default function ProjectDetailPage() {
   const [editColor, setEditColor] = useState('')
   const [editShortcut, setEditShortcut] = useState('')
 
-  // upload
-  const [uploading, setUploading] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState<number | null>(null)
-  const [uploadError, setUploadError] = useState<string | null>(null)
-  const [datasetName, setDatasetName] = useState('')
+  // upload queue — datasets upload AND ingest one at a time so the backend is
+  // never hit with parallel ingestions (which saturate the small EC2 box).
+  const [queue, setQueue] = useState<QueueItem[]>([])
+  const [running, setRunning] = useState(false)
   const [datasetDesc, setDatasetDesc] = useState('')
   const [sampleType, setSampleType] = useState('')
 
@@ -155,50 +169,91 @@ export default function ProjectDetailPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['datasets', projectId] }),
   })
 
-  const handleUpload = async () => {
-    const file = fileRef.current?.files?.[0]
-    if (!file || !datasetName.trim()) return
-    setUploading(true)
-    setUploadProgress(0)
-    setUploadError(null)
-    let datasetId: string | null = null
-    try {
-      // Step 1: create DB record + get presigned S3 URL
-      const { data } = await apiClient.post('/api/datasets/prepare-upload', {
-        project_id: projectId,
-        name: datasetName,
-        description: datasetDesc || undefined,
-        sample_type: sampleType || undefined,
-      }, { timeout: UPLOAD_API_TIMEOUT })
-      datasetId = data.dataset_id
+  const updateItem = (id: string, patch: Partial<QueueItem>) =>
+    setQueue((q) => q.map((it) => (it.id === id ? { ...it, ...patch } : it)))
 
-      // Step 2: upload directly to S3 — bypasses Vercel entirely
-      // Content-Type must match what was signed into the presigned URL (application/zip)
-      await axios.put(data.upload_url, file, {
-        headers: { 'Content-Type': 'application/zip' },
-        onUploadProgress: (e) => {
-          if (e.total) setUploadProgress(Math.round((e.loaded / e.total) * 100))
-        },
-      })
+  const removeItem = (id: string) => setQueue((q) => q.filter((it) => it.id !== id))
 
-      // Step 3: trigger ingestion on the backend
-      await apiClient.post(`/api/datasets/${datasetId}/ingest`, undefined, { timeout: UPLOAD_API_TIMEOUT })
+  const handleFilesSelected = (e: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? [])
+    if (files.length === 0) return
+    setQueue(
+      files.map((f, i) => ({
+        id: `${Date.now()}-${i}-${f.name}`,
+        file: f,
+        name: stripZip(f.name),
+        status: 'queued' as QueueStatus,
+        progress: 0,
+      }))
+    )
+  }
 
-      queryClient.invalidateQueries({ queryKey: ['datasets', projectId] })
-      setDatasetName('')
-      setDatasetDesc('')
-      setSampleType('')
-      if (fileRef.current) fileRef.current.value = ''
-    } catch (err: any) {
-      // Clean up the orphaned pending dataset record if upload or ingest call failed
-      if (datasetId) {
-        try { await apiClient.delete(`/api/datasets/${datasetId}`, { timeout: UPLOAD_API_TIMEOUT }) } catch {}
+  // Poll until ingestion finishes so the next dataset doesn't start ingesting
+  // in parallel (which is what saturates the backend). Generous cap; if exceeded
+  // we stop waiting and move on rather than blocking the queue forever.
+  const waitForIngest = async (datasetId: string): Promise<'ready' | 'error'> => {
+    const deadline = Date.now() + INGEST_WAIT_MS
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 3000))
+      try {
+        const { data } = await apiClient.get(`/api/datasets/${datasetId}`, { timeout: UPLOAD_API_TIMEOUT })
+        if (data.status === 'ready') return 'ready'
+        if (data.status === 'error') return 'error'
+      } catch {
+        // transient — keep polling
       }
-      setUploadError(err.response?.data?.detail || err.message || 'Upload failed')
-    } finally {
-      setUploading(false)
-      setUploadProgress(null)
     }
+    return 'ready'
+  }
+
+  const pendingCount = queue.filter((it) => it.status === 'queued' || it.status === 'error').length
+
+  const runQueue = async () => {
+    const pending = queue.filter((it) => it.status === 'queued' || it.status === 'error')
+    if (pending.length === 0) return
+    setRunning(true)
+    for (const item of pending) {
+      let datasetId: string | null = null
+      try {
+        updateItem(item.id, { status: 'uploading', progress: 0, error: undefined })
+
+        // Step 1: create DB record + get presigned S3 URL
+        const { data } = await apiClient.post('/api/datasets/prepare-upload', {
+          project_id: projectId,
+          name: item.name.trim() || stripZip(item.file.name),
+          description: datasetDesc || undefined,
+          sample_type: sampleType || undefined,
+        }, { timeout: UPLOAD_API_TIMEOUT })
+        const dsId: string = data.dataset_id
+        datasetId = dsId
+
+        // Step 2: upload directly to S3 — Content-Type must match the signed URL
+        await axios.put(data.upload_url, item.file, {
+          headers: { 'Content-Type': 'application/zip' },
+          onUploadProgress: (e) => {
+            if (e.total) updateItem(item.id, { progress: Math.round((e.loaded / e.total) * 100) })
+          },
+        })
+
+        // Step 3: trigger ingestion, then wait for it to finish before the next
+        updateItem(item.id, { status: 'processing', progress: 100 })
+        await apiClient.post(`/api/datasets/${dsId}/ingest`, undefined, { timeout: UPLOAD_API_TIMEOUT })
+        queryClient.invalidateQueries({ queryKey: ['datasets', projectId] })
+
+        const result = await waitForIngest(dsId)
+        updateItem(item.id, result === 'ready'
+          ? { status: 'done' }
+          : { status: 'error', error: 'Ingestion failed — see dataset for details' })
+      } catch (err: any) {
+        // Clean up the orphaned pending record if upload or ingest call failed
+        if (datasetId) {
+          try { await apiClient.delete(`/api/datasets/${datasetId}`, { timeout: UPLOAD_API_TIMEOUT }) } catch {}
+        }
+        updateItem(item.id, { status: 'error', error: err.response?.data?.detail || err.message || 'Upload failed' })
+      }
+      queryClient.invalidateQueries({ queryKey: ['datasets', projectId] })
+    }
+    setRunning(false)
   }
 
   const handleExport = (format: 'csv' | 'json', dsId?: string, dsName?: string) => {
@@ -434,57 +489,80 @@ export default function ProjectDetailPage() {
             })}
           </div>
 
-          {/* Upload new dataset */}
+          {/* Upload datasets */}
           <div className="mt-4 rounded-xl bg-gray-900 p-5 space-y-3">
-            <h3 className="font-medium text-white">Upload dataset (ZIP)</h3>
-            <input
-              value={datasetName}
-              onChange={(e) => setDatasetName(e.target.value)}
-              placeholder="Dataset name *"
-              className="w-full rounded-lg bg-gray-800 px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
+            <h3 className="font-medium text-white">Upload datasets (ZIP)</h3>
+            <p className="text-xs text-gray-500">
+              Select one or more ZIPs. Each becomes a dataset named after its file. They upload and ingest one at a time so the server isn't overloaded.
+            </p>
             <div className="flex gap-3">
               <input
                 value={sampleType}
                 onChange={(e) => setSampleType(e.target.value)}
-                placeholder="Sample type (e.g. mouse brain)"
+                placeholder="Sample type (applies to all)"
                 className="flex-1 rounded-lg bg-gray-800 px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
               <input
                 value={datasetDesc}
                 onChange={(e) => setDatasetDesc(e.target.value)}
-                placeholder="Description"
+                placeholder="Description (applies to all)"
                 className="flex-1 rounded-lg bg-gray-800 px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
-            <input ref={fileRef} type="file" accept=".zip" className="text-sm text-gray-400" />
-            {uploadError && <p className="text-sm text-red-400">{uploadError}</p>}
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".zip"
+              multiple
+              onChange={handleFilesSelected}
+              disabled={running}
+              className="text-sm text-gray-400 disabled:opacity-50"
+            />
 
-            {/* Progress bar */}
-            {uploadProgress !== null && (
-              <div className="space-y-1">
-                <div className="flex justify-between text-xs text-gray-400">
-                  <span>{uploadProgress < 100 ? 'Uploading…' : 'Processing…'}</span>
-                  {uploadProgress < 100 && <span>{uploadProgress}%</span>}
-                </div>
-                <div className="h-1.5 rounded-full bg-gray-800">
-                  <div
-                    className={`h-1.5 rounded-full transition-all duration-300 ${uploadProgress < 100 ? 'bg-indigo-500' : 'bg-brand-orange animate-pulse'}`}
-                    style={{ width: uploadProgress < 100 ? `${uploadProgress}%` : '100%' }}
-                  />
-                </div>
-                {uploadProgress === 100 && (
-                  <p className="text-xs text-gray-500">File received — ingesting ions…</p>
-                )}
+            {queue.length > 0 && (
+              <div className="space-y-1.5">
+                {queue.map((item) => (
+                  <div key={item.id} className="flex items-center gap-2 rounded-lg bg-gray-800 px-3 py-2">
+                    <input
+                      value={item.name}
+                      onChange={(e) => updateItem(item.id, { name: e.target.value })}
+                      disabled={running || (item.status !== 'queued' && item.status !== 'error')}
+                      className="min-w-0 flex-1 rounded bg-gray-900 px-2 py-1 text-sm text-white disabled:opacity-60 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    />
+                    <div className="w-44 flex-shrink-0">
+                      {item.status === 'queued' && <span className="text-xs text-gray-500">queued</span>}
+                      {item.status === 'uploading' && (
+                        <div className="flex items-center gap-2">
+                          <div className="h-1.5 flex-1 rounded-full bg-gray-700">
+                            <div className="h-1.5 rounded-full bg-indigo-500 transition-all" style={{ width: `${item.progress}%` }} />
+                          </div>
+                          <span className="w-9 text-right text-xs text-gray-400">{item.progress}%</span>
+                        </div>
+                      )}
+                      {item.status === 'processing' && <span className="text-xs text-yellow-400 animate-pulse">ingesting…</span>}
+                      {item.status === 'done' && <span className="text-xs text-green-400">✓ ready</span>}
+                      {item.status === 'error' && <span className="block truncate text-xs text-red-400" title={item.error}>✕ {item.error}</span>}
+                    </div>
+                    {!running && (item.status === 'queued' || item.status === 'error') && (
+                      <button
+                        onClick={() => removeItem(item.id)}
+                        className="flex-shrink-0 text-sm text-gray-600 hover:text-red-400 transition-colors"
+                        title="Remove from queue"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                ))}
               </div>
             )}
 
             <button
-              onClick={handleUpload}
-              disabled={uploading || !datasetName.trim()}
+              onClick={runQueue}
+              disabled={running || pendingCount === 0}
               className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50 transition-colors"
             >
-              {uploading ? 'Uploading…' : 'Upload'}
+              {running ? 'Uploading…' : `Upload ${pendingCount} dataset${pendingCount === 1 ? '' : 's'}`}
             </button>
           </div>
         </section>
