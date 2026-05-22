@@ -245,14 +245,15 @@ async def delete_dataset(
     if not dataset:
         raise HTTPException(status_code=404, detail="Dataset not found")
 
-    # Delete S3 images (best effort — don't fail if S3 errors)
-    try:
-        delete_dataset_images(dataset_id)
-    except Exception:
-        pass
-
     await db.delete(dataset)
     await db.commit()
+
+    # Clean up S3 after DB delete (best-effort, off the event loop)
+    loop = asyncio.get_running_loop()
+    try:
+        await loop.run_in_executor(None, delete_dataset_images, dataset_id)
+    except Exception:
+        pass
 
 
 @router.patch("/api/datasets/{dataset_id}/reference-images", response_model=DatasetOut)

@@ -165,9 +165,12 @@ export default function ProjectDetailPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['project', projectId] }),
   })
 
+  const [datasetDeleteError, setDatasetDeleteError] = useState<string | null>(null)
+
   const deleteDataset = useMutation({
-    mutationFn: (datasetId: string) => apiClient.delete(`/api/datasets/${datasetId}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['datasets', projectId] }),
+    mutationFn: (datasetId: string) => apiClient.delete(`/api/datasets/${datasetId}`, { timeout: 30000 }),
+    onSuccess: () => { setDatasetDeleteError(null); queryClient.invalidateQueries({ queryKey: ['datasets', projectId] }) },
+    onError: () => setDatasetDeleteError('Delete failed — please try again.'),
   })
 
   const updateItem = (id: string, patch: Partial<QueueItem>) =>
@@ -334,6 +337,12 @@ export default function ProjectDetailPage() {
         {/* Datasets */}
         <section>
           <h2 className="mb-4 text-lg font-semibold text-white">Datasets</h2>
+          {datasetDeleteError && (
+            <div className="mb-3 rounded-lg bg-red-900/40 border border-red-700 px-4 py-3 text-sm text-red-300 flex items-center justify-between">
+              <span>{datasetDeleteError}</span>
+              <button onClick={() => setDatasetDeleteError(null)} className="ml-4 text-red-400 hover:text-red-200">✕</button>
+            </div>
+          )}
           <div className="space-y-3">
             {datasets?.map((ds) => {
               const pct = ds.total_ions > 0 ? Math.round((ds.my_annotation_count / ds.total_ions) * 100) : 0

@@ -38,9 +38,12 @@ export default function ProjectsPage() {
     },
   })
 
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
   const deleteProject = useMutation({
-    mutationFn: (projectId: string) => apiClient.delete(`/api/projects/${projectId}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['projects'] }),
+    mutationFn: (projectId: string) => apiClient.delete(`/api/projects/${projectId}`, { timeout: 30000 }),
+    onSuccess: () => { setDeleteError(null); queryClient.invalidateQueries({ queryKey: ['projects'] }) },
+    onError: () => setDeleteError('Delete failed — please try again.'),
   })
 
   const createProject = useMutation({
@@ -145,6 +148,12 @@ export default function ProjectsPage() {
       </header>
 
       <main className="mx-auto max-w-3xl px-4 py-10">
+        {deleteError && (
+          <div className="mb-4 rounded-lg bg-red-900/40 border border-red-700 px-4 py-3 text-sm text-red-300 flex items-center justify-between">
+            <span>{deleteError}</span>
+            <button onClick={() => setDeleteError(null)} className="ml-4 text-red-400 hover:text-red-200">✕</button>
+          </div>
+        )}
         <div className="mb-6 flex items-center justify-between">
           <h2 className="text-2xl font-semibold text-white">Projects</h2>
           <button

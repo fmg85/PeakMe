@@ -36,4 +36,4 @@ class Dataset(Base):
     )
 
     project = relationship("Project", back_populates="datasets")
-    ions = relationship("Ion", back_populates="dataset", cascade="all, delete-orphan")
+    ions = relationship("Ion", back_populates="dataset", cascade="all, delete-orphan", passive_deletes=True)

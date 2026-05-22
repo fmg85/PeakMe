@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -7,8 +8,10 @@ from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.deps import CurrentUser
+from app.models.dataset import Dataset
 from app.models.project import Project
 from app.schemas.project import ProjectCreate, ProjectOut, ProjectUpdate
+from app.services.storage import delete_dataset_images
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
@@ -95,5 +98,18 @@ async def delete_project(
         raise HTTPException(status_code=404, detail="Project not found")
     if project.created_by != current_user.id and not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Not authorized")
+
+    # Collect dataset IDs for S3 cleanup before deletion
+    ds_result = await db.execute(select(Dataset.id).where(Dataset.project_id == project_id))
+    dataset_ids = [row[0] for row in ds_result.all()]
+
     await db.delete(project)
     await db.commit()
+
+    # Clean up S3 images for all datasets (best-effort, off the event loop)
+    loop = asyncio.get_running_loop()
+    for ds_id in dataset_ids:
+        try:
+            await loop.run_in_executor(None, delete_dataset_images, ds_id)
+        except Exception:
+            pass

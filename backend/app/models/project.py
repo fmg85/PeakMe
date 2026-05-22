@@ -28,4 +28,4 @@ class Project(Base):
         "LabelOption", back_populates="project", cascade="all, delete-orphan",
         order_by="LabelOption.sort_order"
     )
-    datasets = relationship("Dataset", back_populates="project", cascade="all, delete-orphan")
+    datasets = relationship("Dataset", back_populates="project", cascade="all, delete-orphan", passive_deletes=True)

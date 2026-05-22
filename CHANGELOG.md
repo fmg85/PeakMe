@@ -5,6 +5,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## 2026-08-07
+
+- fix: dataset and project deletes are now reliable — S3 cleanup moved off the async event loop (`run_in_executor`), `passive_deletes=True` on all cascade relationships so SQLAlchemy trusts the DB-level `ON DELETE CASCADE` instead of loading every child row first, and delete calls get a 30s timeout instead of the global 10s. Deleting a large dataset or project no longer intermittently times out
+- fix: project delete now also removes the S3 images for all of its datasets (previously orphaned in the bucket)
+- fix: a failed delete now shows an error instead of silently doing nothing
+
 ## 2026-06-14
 
 - chore: CI now gates the EC2 deploy on automated checks — every push to `main` runs `ruff` (bug-focused: undefined names, dead imports, syntax), an app import smoke-test, and `alembic upgrade head` against a throwaway Postgres **before** deploying. A failing check skips the deploy and leaves prod on the last good commit; direct push-to-main (incl. mobile sessions) is unchanged. Stops broken migrations from ever reaching the production database. See ADR-013.

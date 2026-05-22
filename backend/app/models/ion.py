@@ -30,5 +30,5 @@ class Ion(Base):
     )
 
     dataset = relationship("Dataset", back_populates="ions")
-    annotations = relationship("Annotation", back_populates="ion", cascade="all, delete-orphan")
-    stars = relationship("IonStar", back_populates="ion", cascade="all, delete-orphan")
+    annotations = relationship("Annotation", back_populates="ion", cascade="all, delete-orphan", passive_deletes=True)
+    stars = relationship("IonStar", back_populates="ion", cascade="all, delete-orphan", passive_deletes=True)
