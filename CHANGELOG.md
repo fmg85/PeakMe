@@ -5,6 +5,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## 2026-05-22
+
+- fix: include `Content-Type` in the presigned S3 PUT signature so direct uploads no longer fail with a generic "network error" (browser sends `Content-Type` for the file; S3 rejects any header missing from the signature)
+- fix: raise the upload-flow API timeout (prepare-upload / ingest / cleanup) from 10s to 60s so uploads don't fail prematurely when the backend is busy ingesting other datasets
+
 ## 2026-05-21
 
 - feat: upload ZIPs directly to S3 via presigned URLs, bypassing Vercel's request body size limit; large datasets now upload reliably

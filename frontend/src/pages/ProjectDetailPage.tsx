@@ -14,6 +14,11 @@ type SwipeDir = 'left' | 'right' | 'up' | 'down'
 const SWIPE_DIRS: SwipeDir[] = ['left', 'right', 'up', 'down']
 const DIR_ARROW: Record<SwipeDir, string> = { left: '←', right: '→', up: '↑', down: '↓' }
 
+// prepare-upload/ingest/cleanup are quick DB ops, but on a busy backend they
+// queue behind in-flight ingestions. Give them a longer timeout than the
+// default 10s (which is tuned for fast-failing read queries).
+const UPLOAD_API_TIMEOUT = 60000
+
 function DirectionPicker({
   value,
   onChange,
@@ -164,7 +169,7 @@ export default function ProjectDetailPage() {
         name: datasetName,
         description: datasetDesc || undefined,
         sample_type: sampleType || undefined,
-      })
+      }, { timeout: UPLOAD_API_TIMEOUT })
       datasetId = data.dataset_id
 
       // Step 2: upload directly to S3 — bypasses Vercel entirely
@@ -177,7 +182,7 @@ export default function ProjectDetailPage() {
       })
 
       // Step 3: trigger ingestion on the backend
-      await apiClient.post(`/api/datasets/${datasetId}/ingest`)
+      await apiClient.post(`/api/datasets/${datasetId}/ingest`, undefined, { timeout: UPLOAD_API_TIMEOUT })
 
       queryClient.invalidateQueries({ queryKey: ['datasets', projectId] })
       setDatasetName('')
@@ -187,7 +192,7 @@ export default function ProjectDetailPage() {
     } catch (err: any) {
       // Clean up the orphaned pending dataset record if upload or ingest call failed
       if (datasetId) {
-        try { await apiClient.delete(`/api/datasets/${datasetId}`) } catch {}
+        try { await apiClient.delete(`/api/datasets/${datasetId}`, { timeout: UPLOAD_API_TIMEOUT }) } catch {}
       }
       setUploadError(err.response?.data?.detail || err.message || 'Upload failed')
     } finally {
