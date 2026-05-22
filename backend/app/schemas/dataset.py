@@ -11,6 +11,7 @@ class DatasetOut(BaseModel):
     description: str | None
     sample_type: str | None
     total_ions: int
+    processed_ions: int = 0
     my_annotation_count: int = 0
     status: str
     error_msg: str | None

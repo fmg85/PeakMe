@@ -102,19 +102,40 @@ async def ingest_zip(
             tic_bytes = None
         upload_items.append((fname, mz, img_bytes, tic_fname if tic_bytes is not None else None, tic_bytes))
 
+    # Publish the total up-front so the client can show a denominator and a
+    # moving progress bar while the (slow) S3 uploads run.
+    total = len(upload_items)
+    dataset.total_ions = total
+    dataset.processed_ions = 0
+    await db.commit()
+
     # ── Parallel S3 uploads (no ZIP access in threads) ─────────────────────────
     loop = asyncio.get_running_loop()
 
-    def _upload(item: tuple[str, float, bytes, str | None, bytes | None]) -> tuple[str, float, str, str | None]:
+    def _upload(idx: int, item: tuple[str, float, bytes, str | None, bytes | None]) -> tuple[int, str, float, str, str | None]:
         fname, mz, img_bytes, tic_fname, tic_bytes = item
         key = upload_image(img_bytes, dataset.id, fname)
         tic_key = upload_image(tic_bytes, dataset.id, tic_fname) if tic_bytes is not None and tic_fname else None
-        return (fname, mz, key, tic_key)
+        return (idx, fname, mz, key, tic_key)
+
+    # Persist progress in ~2% steps so the client sees movement without one DB
+    # write per ion. as_completed lets us count finished uploads; results are
+    # re-sorted by index afterwards to preserve metadata.csv order.
+    commit_step = max(1, total // 50)
+    results_by_idx: dict[int, tuple[str, float, str, str | None]] = {}
+    done = 0
 
     with ThreadPoolExecutor(max_workers=_S3_WORKERS) as pool:
-        results = await asyncio.gather(
-            *[loop.run_in_executor(pool, _upload, item) for item in upload_items]
-        )
+        futures = [loop.run_in_executor(pool, _upload, idx, item) for idx, item in enumerate(upload_items)]
+        for coro in asyncio.as_completed(futures):
+            idx, fname, mz, key, tic_key = await coro
+            results_by_idx[idx] = (fname, mz, key, tic_key)
+            done += 1
+            if done % commit_step == 0 and done < total:
+                dataset.processed_ions = done
+                await db.commit()
+
+    results = [results_by_idx[i] for i in range(total)]
 
     # ── Bulk DB insert ─────────────────────────────────────────────────────────
     ions = [
@@ -129,6 +150,7 @@ async def ingest_zip(
     ]
     db.add_all(ions)
     dataset.total_ions = len(ions)
+    dataset.processed_ions = len(ions)
     dataset.status = "ready"
     await db.commit()
 

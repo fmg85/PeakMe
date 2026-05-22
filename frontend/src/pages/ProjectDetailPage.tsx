@@ -29,6 +29,7 @@ type QueueItem = {
   name: string
   status: QueueStatus
   progress: number
+  ingestPct?: number
   error?: string
 }
 
@@ -191,12 +192,15 @@ export default function ProjectDetailPage() {
   // Poll until ingestion finishes so the next dataset doesn't start ingesting
   // in parallel (which is what saturates the backend). Generous cap; if exceeded
   // we stop waiting and move on rather than blocking the queue forever.
-  const waitForIngest = async (datasetId: string): Promise<'ready' | 'error'> => {
+  const waitForIngest = async (datasetId: string, itemId: string): Promise<'ready' | 'error'> => {
     const deadline = Date.now() + INGEST_WAIT_MS
     while (Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 3000))
       try {
-        const { data } = await apiClient.get(`/api/datasets/${datasetId}`, { timeout: UPLOAD_API_TIMEOUT })
+        const { data } = await apiClient.get<Dataset>(`/api/datasets/${datasetId}`, { timeout: UPLOAD_API_TIMEOUT })
+        if (data.total_ions > 0) {
+          updateItem(itemId, { ingestPct: Math.min(100, Math.round((data.processed_ions / data.total_ions) * 100)) })
+        }
         if (data.status === 'ready') return 'ready'
         if (data.status === 'error') return 'error'
       } catch {
@@ -240,7 +244,7 @@ export default function ProjectDetailPage() {
         await apiClient.post(`/api/datasets/${dsId}/ingest`, undefined, { timeout: UPLOAD_API_TIMEOUT })
         queryClient.invalidateQueries({ queryKey: ['datasets', projectId] })
 
-        const result = await waitForIngest(dsId)
+        const result = await waitForIngest(dsId, item.id)
         updateItem(item.id, result === 'ready'
           ? { status: 'done' }
           : { status: 'error', error: 'Ingestion failed — see dataset for details' })
@@ -344,7 +348,11 @@ export default function ProjectDetailPage() {
                         {ds.sample_type && ` · ${ds.sample_type}`}
                         {ds.status !== 'ready' && (
                           <span className={` · ${ds.status === 'error' ? 'text-red-400' : 'text-yellow-400 animate-pulse'}`}>
-                            {ds.status === 'processing' ? 'processing ions…' : ds.status}
+                            {ds.status === 'processing'
+                              ? (ds.total_ions > 0
+                                  ? `processing ions… ${Math.round((ds.processed_ions / ds.total_ions) * 100)}%`
+                                  : 'processing ions…')
+                              : ds.status}
                           </span>
                         )}
                       </p>
@@ -539,7 +547,18 @@ export default function ProjectDetailPage() {
                           <span className="w-9 text-right text-xs text-gray-400">{item.progress}%</span>
                         </div>
                       )}
-                      {item.status === 'processing' && <span className="text-xs text-yellow-400 animate-pulse">ingesting…</span>}
+                      {item.status === 'processing' && (
+                        item.ingestPct != null ? (
+                          <div className="flex items-center gap-2">
+                            <div className="h-1.5 flex-1 rounded-full bg-gray-700">
+                              <div className="h-1.5 rounded-full bg-brand-orange transition-all" style={{ width: `${item.ingestPct}%` }} />
+                            </div>
+                            <span className="w-12 text-right text-xs text-gray-400">{item.ingestPct}%</span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-yellow-400 animate-pulse">ingesting…</span>
+                        )
+                      )}
                       {item.status === 'done' && <span className="text-xs text-green-400">✓ ready</span>}
                       {item.status === 'error' && <span className="block truncate text-xs text-red-400" title={item.error}>✕ {item.error}</span>}
                     </div>

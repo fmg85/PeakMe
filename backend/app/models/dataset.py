@@ -21,6 +21,9 @@ class Dataset(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     sample_type: Mapped[str | None] = mapped_column(String(200), nullable=True)
     total_ions: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    processed_ions: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False, server_default="0"
+    )
     status: Mapped[str] = mapped_column(
         String(20), default="pending", nullable=False
     )  # pending | ready | error
