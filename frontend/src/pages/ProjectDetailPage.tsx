@@ -503,18 +503,18 @@ export default function ProjectDetailPage() {
             <p className="text-xs text-gray-500">
               Select one or more ZIPs. Each becomes a dataset named after its file. They upload and ingest one at a time so the server isn't overloaded.
             </p>
-            <div className="flex gap-3">
+            <div className="flex flex-col sm:flex-row gap-3">
               <input
                 value={sampleType}
                 onChange={(e) => setSampleType(e.target.value)}
                 placeholder="Sample type (applies to all)"
-                className="flex-1 rounded-lg bg-gray-800 px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="min-w-0 flex-1 rounded-lg bg-gray-800 px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
               <input
                 value={datasetDesc}
                 onChange={(e) => setDatasetDesc(e.target.value)}
                 placeholder="Description (applies to all)"
-                className="flex-1 rounded-lg bg-gray-800 px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="min-w-0 flex-1 rounded-lg bg-gray-800 px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
             <input
