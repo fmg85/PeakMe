@@ -138,6 +138,26 @@ After deployment, copy your Vercel URL (e.g. `https://your-project.vercel.app`) 
 > update it after Vercel deploys. Until updated, the deployed frontend will get CORS
 > errors — but the API and health check will work for testing.
 
+### S3 bucket CORS — offline image caching (PWA)
+
+The offline PWA (ADR-012) caches ion images on the device by fetching them with the
+browser `fetch()` API, which requires the `peakme-ions` bucket to allow **GET** from the
+app origins via CORS. (The bucket already allows `PUT` for direct ZIP uploads.) Apply
+both rules — `put-bucket-cors` replaces the entire config, so include the existing `PUT`
+rule:
+
+```bash
+aws s3api put-bucket-cors --bucket peakme-ions --cors-configuration '{
+  "CORSRules": [
+    { "AllowedMethods": ["PUT"], "AllowedOrigins": ["https://peak-me.vercel.app","https://www.peakme.now"], "AllowedHeaders": ["*"], "MaxAgeSeconds": 3000 },
+    { "AllowedMethods": ["GET"], "AllowedOrigins": ["https://peak-me.vercel.app","https://www.peakme.now","http://localhost:5173"], "AllowedHeaders": ["*"], "MaxAgeSeconds": 3000 }
+  ]
+}'
+```
+
+Without the `GET` rule, online annotation still works (images load via `<img>`), but the
+"Download for offline" action cannot cache image bytes.
+
 ## 9. Renew SSL Certificate (Automatic)
 
 > This cron job references `/home/ubuntu/PeakMe/`. If your deploy user or repo path

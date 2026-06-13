@@ -8,6 +8,7 @@ import ProjectDetailPage from './pages/ProjectDetailPage'
 import AnnotatePage from './pages/AnnotatePage'
 import StatsPage from './pages/StatsPage'
 import InstructionsPage from './pages/InstructionsPage'
+import InstallPrompt from './components/InstallPrompt'
 
 function App() {
   const [user, setUser] = useState<SupabaseUser | null | undefined>(undefined)
@@ -64,6 +65,7 @@ function App() {
         />
         <Route path="*" element={<Navigate to={user ? '/projects' : '/login'} replace />} />
       </Routes>
+      {user && <InstallPrompt />}
     </BrowserRouter>
   )
 }

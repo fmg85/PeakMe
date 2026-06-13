@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import apiClient from '../lib/apiClient'
 import type { IonQueueItem } from '../lib/types'
+import { fetchOfflineBatch, getOfflineDataset } from '../lib/offline/db'
+import { isNetworkError } from '../lib/offline/sync'
 
 const BATCH_SIZE = 20
 const PREFETCH_AHEAD = 5
@@ -19,6 +21,7 @@ export function useAnnotationQueue({ datasetId, strategy = 'unannotated_first', 
   // the filtered result set, causing gaps).
   const [cursor, setCursor] = useState(-1)
   const [exhausted, setExhausted] = useState(false)
+  const [loadError, setLoadError] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
   const prefetchingRef = useRef(false)
   // Prevents prefetch effect from firing before the initial batch completes
@@ -29,11 +32,19 @@ export function useAnnotationQueue({ datasetId, strategy = 'unannotated_first', 
   const fetchBatch = useCallback(async (afterSortOrder: number): Promise<IonQueueItem[]> => {
     const params: Record<string, unknown> = { limit: BATCH_SIZE, strategy, after_sort_order: afterSortOrder }
     if (labelFilter) params.label_filter = labelFilter
-    const { data } = await apiClient.get<IonQueueItem[]>(
-      `/api/datasets/${datasetId}/ions/queue`,
-      { params }
-    )
-    return data
+    try {
+      const { data } = await apiClient.get<IonQueueItem[]>(
+        `/api/datasets/${datasetId}/ions/queue`,
+        { params }
+      )
+      return data
+    } catch (err) {
+      // Offline / backend unreachable: serve from the downloaded snapshot if present.
+      if (isNetworkError(err) && (await getOfflineDataset(datasetId))) {
+        return fetchOfflineBatch(datasetId, { strategy, labelFilter, afterSortOrder, limit: BATCH_SIZE })
+      }
+      throw err
+    }
   }, [datasetId, strategy, labelFilter])
 
   // Initial load
@@ -42,6 +53,7 @@ export function useAnnotationQueue({ datasetId, strategy = 'unannotated_first', 
     setQueue([])
     setCursor(-1)
     setExhausted(false)
+    setLoadError(false)
     fetchBatch(-1).then((items) => {
       setQueue(items)
       if (items.length > 0) setCursor(items[items.length - 1].sort_order)
@@ -50,6 +62,12 @@ export function useAnnotationQueue({ datasetId, strategy = 'unannotated_first', 
         prefetchImage(item.image_url)
         if (item.tic_image_url) prefetchImage(item.tic_image_url)
       })
+      initializedRef.current = true
+    }).catch(() => {
+      // The initial queue load failed (server error, or offline with no downloaded copy).
+      // Surface a distinct error state — NEVER set `exhausted`, which would render the
+      // misleading "All done!" completion screen for what is actually a load failure.
+      setLoadError(true)
       initializedRef.current = true
     })
   }, [datasetId, strategy, labelFilter, reloadKey])
@@ -67,6 +85,10 @@ export function useAnnotationQueue({ datasetId, strategy = 'unannotated_first', 
           prefetchImage(item.image_url)
           if (item.tic_image_url) prefetchImage(item.tic_image_url)
         })
+        prefetchingRef.current = false
+      }).catch(() => {
+        // Transient prefetch failure: stop, don't fake exhaustion. The next advance
+        // re-triggers this effect and retries once connectivity returns.
         prefetchingRef.current = false
       })
     }
@@ -90,7 +112,7 @@ export function useAnnotationQueue({ datasetId, strategy = 'unannotated_first', 
     })
   }, [])
 
-  return { current, remaining, advance, updateCurrent, exhausted, forceReload, prependItem }
+  return { current, remaining, advance, updateCurrent, exhausted, loadError, forceReload, prependItem }
 }
 
 function prefetchImage(url: string) {

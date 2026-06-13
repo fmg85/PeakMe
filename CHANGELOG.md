@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## 2026-06-13
+
+- feat: offline companion (installable PWA) — PeakMe can now be installed to a phone/tablet/desktop home screen and used **offline**. A platform-aware install prompt triggers the real install dialog on Android/desktop Chrome and shows guided "Add to Home Screen / Add to Dock" steps on iOS/macOS Safari (Apple has no install API)
+- feat: "⤓ Download for offline" on the dataset session screen — caches a chosen number of ions (next 1,000 / 3,000 / whole dataset) with an optional **Include TIC spectra** toggle and a live size estimate (≈8 KB/ion, ≈25 KB extra per TIC). Ion images are stored in the service-worker cache so the existing image views work offline unchanged
+- feat: offline annotation — annotate, star, and undo with no connection. Actions are queued in IndexedDB and replayed automatically on reconnect/app-foreground; idempotent against the existing `(ion_id, user_id)` annotate upsert, so re-sync never duplicates. A sync/offline status indicator shows pending count and progress
+- docs: offline image caching requires a CORS `GET` rule on the `peakme-ions` S3 bucket for the app origins (see `docs/deployment.md`); recorded as ADR-012
+
 ## 2026-05-22
 
 - feat: live ingestion progress — the ingest pipeline now publishes `processed_ions / total_ions` as PNGs upload to S3 (new `processed_ions` column, migration 0006). Shown as a moving progress bar per dataset in the upload queue and as a percentage on the dataset card, so you can see ingestion is advancing and not stuck

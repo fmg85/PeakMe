@@ -4,6 +4,11 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useDrag } from '@use-gesture/react'
 import apiClient from '../lib/apiClient'
 import { useAnnotationQueue } from '../hooks/useAnnotationQueue'
+import { annotateIon, toggleStarIon, unannotateIon } from '../lib/offline/mutations'
+import { getOfflineDataset } from '../lib/offline/db'
+import { isNetworkError } from '../lib/offline/sync'
+import OfflineDownloadDialog from '../components/OfflineDownloadDialog'
+import SyncIndicator from '../components/SyncIndicator'
 import type { Dataset, DatasetLabelSummary, IonQueueItem, LabelOption, Project } from '../lib/types'
 
 type AnimDirection = 'left' | 'right' | 'up' | 'down' | null
@@ -48,6 +53,7 @@ export default function AnnotatePage() {
   // double-count and "remaining" would show a wrong non-zero value at exhaustion).
   const [baselineAnnotations, setBaselineAnnotations] = useState(0)
   const [undoStack, setUndoStack] = useState<IonQueueItem[]>([])  // full items, most-recent last
+  const [showOffline, setShowOffline] = useState(false)
 
   // Drag state for swipe gesture
   const [dragXY, setDragXY] = useState<[number, number]>([0, 0])
@@ -55,16 +61,37 @@ export default function AnnotatePage() {
 
   const { data: project } = useQuery<Project>({
     queryKey: ['project', projectId],
-    queryFn: () => apiClient.get(`/api/projects/${projectId}`).then((r) => r.data),
+    queryFn: async () => {
+      try {
+        return (await apiClient.get(`/api/projects/${projectId}`)).data
+      } catch (err) {
+        // Offline: serve the project (incl. label_options) from a downloaded snapshot.
+        if (isNetworkError(err)) {
+          const meta = await getOfflineDataset(datasetId)
+          if (meta) return meta.project
+        }
+        throw err
+      }
+    },
   })
 
   const { data: dataset } = useQuery<Dataset>({
     queryKey: ['dataset', datasetId],
-    queryFn: () => apiClient.get(`/api/datasets/${datasetId}`).then((r) => r.data),
+    queryFn: async () => {
+      try {
+        return (await apiClient.get(`/api/datasets/${datasetId}`)).data
+      } catch (err) {
+        if (isNetworkError(err)) {
+          const meta = await getOfflineDataset(datasetId)
+          if (meta) return meta.dataset
+        }
+        throw err
+      }
+    },
     enabled: !!datasetId,
   })
 
-  const { current, remaining, advance, updateCurrent, exhausted, forceReload, prependItem } = useAnnotationQueue({
+  const { current, remaining, advance, updateCurrent, exhausted, loadError, forceReload, prependItem } = useAnnotationQueue({
     datasetId,
     strategy,
     labelFilter,
@@ -100,7 +127,7 @@ export default function AnnotatePage() {
     const wasAlreadyAnnotated = !!snapshot.annotation  // don't inflate counter on re-annotation
     setAnim(direction)
     try {
-      await apiClient.post(`/api/ions/${snapshot.id}/annotate`, { label_option_id: label.id })
+      await annotateIon(datasetId, snapshot.id, label.id, label.name)
       setUndoStack((s) => [...s, snapshot])
       setSessionReviewed((n) => n + 1)
       if (!wasAlreadyAnnotated) setSessionAnnotations((n) => n + 1)
@@ -109,13 +136,13 @@ export default function AnnotatePage() {
       return
     }
     setTimeout(() => { advance(); setAnim(null) }, 320)
-  }, [current, advance])
+  }, [current, advance, datasetId])
 
   const toggleStar = useCallback(async () => {
     if (!current) return
-    const { data } = await apiClient.post(`/api/ions/${current.id}/star`)
-    updateCurrent((item) => ({ ...item, is_starred: data.starred }))
-  }, [current, updateCurrent])
+    const starred = await toggleStarIon(datasetId, current.id, current.is_starred)
+    updateCurrent((item) => ({ ...item, is_starred: starred }))
+  }, [current, updateCurrent, datasetId])
 
   const undo = useCallback(async () => {
     if (undoStack.length === 0) return
@@ -123,11 +150,11 @@ export default function AnnotatePage() {
     setUndoStack((s) => s.slice(0, -1))
     setSessionAnnotations((n) => Math.max(0, n - 1))
     setSessionReviewed((n) => Math.max(0, n - 1))
-    await apiClient.delete(`/api/ions/${item.id}/annotate`)
+    await unannotateIon(datasetId, item.id)
     // Prepend the undone ion back to the front of the queue (no reload needed).
     // This always lands on exactly the ion that was undone, regardless of strategy.
     prependItem({ ...item, annotation: null })
-  }, [undoStack, prependItem])
+  }, [undoStack, prependItem, datasetId])
 
   // Swipe gesture
   const isDraggingRef = useRef(false)
@@ -282,10 +309,11 @@ export default function AnnotatePage() {
 
     return (
       <div className="flex h-screen flex-col bg-gray-950">
-        <header className="flex items-center border-b border-gray-800 bg-gray-900 px-4 py-3">
+        <header className="flex items-center justify-between border-b border-gray-800 bg-gray-900 px-4 py-3">
           <Link to={`/projects/${projectId}`} className="text-sm text-gray-400 hover:text-white">
             ← {project?.name ?? 'Project'}
           </Link>
+          <SyncIndicator />
         </header>
         <div className="flex flex-1 items-center justify-center p-6 overflow-y-auto">
           <div className="w-full max-w-sm space-y-6 py-4">
@@ -369,8 +397,20 @@ export default function AnnotatePage() {
                 </div>
               </div>
             )}
+
+            {/* Make this dataset available offline (PWA) */}
+            <button
+              onClick={() => setShowOffline(true)}
+              className="w-full rounded-xl border border-gray-800 px-4 py-2.5 text-left text-sm text-gray-300 hover:border-gray-600 transition-colors"
+            >
+              ⤓ Download for offline
+              <span className="mt-0.5 block text-xs text-gray-500">Annotate without a connection · syncs when you're back online</span>
+            </button>
           </div>
         </div>
+        {showOffline && project && (
+          <OfflineDownloadDialog project={project} dataset={dataset} onClose={() => setShowOffline(false)} />
+        )}
       </div>
     )
   }
@@ -402,9 +442,12 @@ export default function AnnotatePage() {
             </p>
           )}
         </div>
-        <Link to={`/projects/${projectId}/stats`} className="text-sm text-gray-400 hover:text-white">
-          Stats
-        </Link>
+        <div className="flex items-center gap-3">
+          <SyncIndicator />
+          <Link to={`/projects/${projectId}/stats`} className="text-sm text-gray-400 hover:text-white">
+            Stats
+          </Link>
+        </div>
       </header>
 
       {/* Progress bar */}
@@ -414,7 +457,26 @@ export default function AnnotatePage() {
 
       {/* Main content */}
       <div className="flex flex-1 flex-col items-center justify-center px-4 py-2 overflow-hidden">
-        {exhausted && !current ? (
+        {loadError && !current ? (
+          <div className="text-center space-y-4 max-w-sm w-full">
+            <div className="text-5xl">⚠️</div>
+            <h2 className="text-xl font-semibold text-white">Couldn't load ions</h2>
+            <p className="text-gray-400">
+              {navigator.onLine
+                ? 'The server returned an error or was unreachable. This is a load failure, not the end of the dataset — please try again.'
+                : "You're offline and this dataset isn't downloaded. Reconnect, or download it for offline use first."}
+            </p>
+            <button
+              onClick={forceReload}
+              className="w-48 rounded-lg bg-brand-orange px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-red transition-colors"
+            >
+              Retry
+            </button>
+            <Link to={`/projects/${projectId}`} className="block text-sm text-gray-400 hover:text-white">
+              Back to project
+            </Link>
+          </div>
+        ) : exhausted && !current ? (
           <div className="text-center space-y-4 max-w-sm w-full">
             <div className="text-5xl">🎉</div>
             <h2 className="text-xl font-semibold text-white">

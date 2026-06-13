@@ -411,6 +411,21 @@ MSE_clean   # use this for downstream analysis, dimensionality reduction, etc.`}
           </ul>
         </CollapsibleSection>
 
+        <CollapsibleSection title="Annotate offline (install the app)" defaultOpen={false}>
+          <p className="text-sm text-gray-400">
+            PeakMe can be installed to your phone, tablet, or desktop and used <strong className="text-white">without a connection</strong> — useful in the field, on a flight, or in a shielded instrument room.
+          </p>
+          <ol className="space-y-2 text-sm text-gray-300 list-decimal list-inside mt-2">
+            <li><strong className="text-white">Install it:</strong> on Android/desktop Chrome tap <strong className="text-white">Install</strong> when prompted; on iPhone/iPad open PeakMe in Safari, tap the <strong className="text-white">Share</strong> button, then <strong className="text-white">Add to Home Screen</strong> (on macOS Safari, <strong className="text-white">Add to Dock</strong>).</li>
+            <li><strong className="text-white">Download a dataset:</strong> open a dataset and tap <code className="rounded bg-gray-800 px-1 text-green-300">⤓ Download for offline</code>. Choose how many ions (next 1,000 / 3,000 / whole dataset) and optionally include the TIC spectra. The estimated size is shown before you download.</li>
+            <li><strong className="text-white">Annotate anywhere:</strong> swipe, star, and undo work offline exactly as online.</li>
+            <li><strong className="text-white">Sync:</strong> when you reconnect (or reopen the app), queued annotations upload automatically. The header shows a sync status while it catches up.</li>
+          </ol>
+          <p className="text-sm text-gray-500 mt-2">
+            A rough guide: ~3,000 ions is about 15 MB without TIC spectra, or ~110 MB with them.
+          </p>
+        </CollapsibleSection>
+
       </main>
     </div>
   )
