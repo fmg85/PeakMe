@@ -5,6 +5,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## 2026-06-14
+
+- fix: installed iOS PWA header cut off under the status bar — the app used a translucent status bar with `viewport-fit=cover`, rendering content full-screen beneath the iOS clock/battery so the sticky header (incl. the back button) was unreachable. Switched to an opaque status bar; content now sits below it.
+
 ## 2026-06-13
 
 - feat: offline companion (installable PWA) — PeakMe can now be installed to a phone/tablet/desktop home screen and used **offline**. A platform-aware install prompt triggers the real install dialog on Android/desktop Chrome and shows guided "Add to Home Screen / Add to Dock" steps on iOS/macOS Safari (Apple has no install API)

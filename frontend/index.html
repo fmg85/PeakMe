@@ -2,13 +2,16 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PeakMe — MSI Annotation</title>
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <meta name="theme-color" content="#0b0f19" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <!-- Opaque status bar so the installed app's content sits BELOW the iOS status bar
+         (not under it). `black-translucent` + `viewport-fit=cover` made the sticky header
+         render beneath the clock/battery and become unreachable. -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <meta name="apple-mobile-web-app-title" content="PeakMe" />
   </head>
   <body class="bg-gray-950 text-gray-100">
