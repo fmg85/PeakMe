@@ -13,11 +13,9 @@ vi.mock('./db', () => ({
   countPending: vi.fn(),
 }))
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 let sync: typeof import('./sync')
 let db: typeof import('./db')
 let post: any
-let del: any
 
 const annotate = (id: number): PendingMutation => ({
   id,
@@ -36,7 +34,6 @@ beforeEach(async () => {
   db = await import('./db')
   const api = (await import('../apiClient')).default as any
   post = api.post
-  del = api.delete
   // sensible defaults
   vi.mocked(db.deletePending).mockResolvedValue(undefined as any)
   vi.mocked(db.countPending).mockResolvedValue(0)

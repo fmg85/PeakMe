@@ -10,7 +10,6 @@ vi.mock('../supabaseClient', () => ({
   supabase: { auth: { onAuthStateChange: vi.fn(), getSession: vi.fn() } },
 }))
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 let db: typeof import('./db')
 let mutations: typeof import('./mutations')
 let post: any
