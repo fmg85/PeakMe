@@ -102,10 +102,16 @@ still works (e.g. from a mobile session); only broken code is blocked from shipp
 
 Run locally:
 ```bash
-# backend
+# backend — pytest needs a throwaway Postgres (real Postgres features are used).
+#   one-time: brew install python@3.11 postgresql@16
+#   start an ephemeral DB on :55432:
+#     initdb -D /tmp/pg -U postgres --auth=trust && pg_ctl -D /tmp/pg -o "-p 55432" -l /tmp/pg.log start && createdb -h localhost -p 55432 -U postgres peakme_test
 cd backend && pip install -r requirements.txt -r requirements-dev.txt
-ruff check app && pytest
-# frontend
+ruff check app
+DATABASE_URL=postgresql+psycopg://postgres@localhost:55432/peakme_test python -m pytest
+# (CI uses a postgres:16 service container instead — see deploy.yml backend-tests.)
+
+# frontend — no external deps; Node + npm only.
 cd frontend && npx tsc -p tsconfig.json --noEmit && npm run lint && npm test
 ```
 

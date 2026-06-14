@@ -92,6 +92,48 @@ jobs:
         continue-on-error: true
         run: alembic check
 
+  # ── Gate 3: the scary backend paths actually behave ────────────────────────
+  # auth (JWT verification + account-merge), the annotate upsert, the queue
+  # cursor, and the ownership 403 — the boundaries where a silent regression
+  # corrupts data or exposes another user's projects.
+  backend-tests:
+    name: Backend tests (pytest)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/postgres
+      SUPABASE_URL: https://example.supabase.co
+      SUPABASE_JWT_SECRET: ci-dummy
+      AWS_ACCESS_KEY_ID: ci-dummy
+      AWS_SECRET_ACCESS_KEY: ci-dummy
+      AWS_S3_BUCKET: ci-dummy
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+      - name: Install dependencies
+        working-directory: backend
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: pytest
+        working-directory: backend
+        run: python -m pytest -q
+
   # ── Frontend lint + type-check ─────────────────────────────────────────────
   # Fast PR-time feedback. NOTE: this does NOT gate the backend deploy below — the
   # frontend ships via Vercel, not this workflow. The frontend's real deploy gate
@@ -126,7 +168,7 @@ jobs:
   # prod on the last good commit. PRs run the checks but never deploy.
   deploy:
     name: Deploy to EC2
-    needs: [backend-checks, migration-check]
+    needs: [backend-checks, migration-check, backend-tests]
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
