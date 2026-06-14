@@ -9,8 +9,16 @@ import { initInstall } from './lib/pwa/install'
 
 // Auto-updating service worker (offline shell + image/API caching).
 registerSW({ immediate: true })
-// Offline sync reconciler + PWA install detection.
-initSync()
+// Offline sync reconciler + PWA install detection. After the reconciler pushes queued
+// offline annotations to the server, refresh the cached views (dataset counts, label
+// summaries) so the UI updates automatically instead of needing a manual reload.
+initSync({
+  onSynced: () => {
+    for (const key of [['datasets'], ['dataset'], ['dataset-label-summary']]) {
+      queryClient.invalidateQueries({ queryKey: key })
+    }
+  },
+})
 initInstall()
 
 const queryClient = new QueryClient({

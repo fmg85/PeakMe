@@ -64,6 +64,9 @@ export function isNetworkError(err: unknown): boolean {
 
 let flushing = false
 let retryTimer: ReturnType<typeof setTimeout> | null = null
+// Called after a flush that actually pushed ≥1 mutation to the server, so the app can
+// refresh cached views (dataset counts, label summaries) without a manual reload.
+let onSyncedCb: (() => void) | null = null
 
 /** Schedule a single delayed flush after a transient server error (coalesced). */
 function scheduleRetry() {
@@ -90,6 +93,7 @@ async function doFlush(): Promise<void> {
   if (flushing || !navigator.onLine) return
   flushing = true
   setState({ syncing: true, lastError: null })
+  let synced = 0
   try {
     const pending = await getAllPending()
     for (const m of pending) {
@@ -119,7 +123,7 @@ async function doFlush(): Promise<void> {
             continue
           }
         }
-        if (m.id != null) await deletePending(m.id)
+        if (m.id != null) { await deletePending(m.id); synced++ }
       } catch (err) {
         if (isNetworkError(err)) {
           // Back offline — stop, keep the rest queued for the next reconnect.
@@ -151,15 +155,23 @@ async function doFlush(): Promise<void> {
     await refreshPendingCount()
     setState({ syncing: false })
     flushing = false
+    if (synced > 0) {
+      try {
+        onSyncedCb?.()
+      } catch {
+        /* cache invalidation is best-effort */
+      }
+    }
   }
 }
 
 let initialized = false
 
 /** Wire up reconnect / foreground triggers. Call once at app start. */
-export function initSync() {
+export function initSync(opts?: { onSynced?: () => void }) {
   if (initialized || typeof window === 'undefined') return
   initialized = true
+  onSyncedCb = opts?.onSynced ?? null
 
   window.addEventListener('online', () => {
     setState({ online: true })
