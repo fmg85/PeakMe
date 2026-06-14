@@ -91,7 +91,7 @@ export default function AnnotatePage() {
     enabled: !!datasetId,
   })
 
-  const { current, remaining, advance, updateCurrent, exhausted, loadError, forceReload, prependItem } = useAnnotationQueue({
+  const { current, advance, updateCurrent, exhausted, loadError, forceReload, prependItem } = useAnnotationQueue({
     datasetId,
     strategy,
     labelFilter,
@@ -613,7 +613,7 @@ export default function AnnotatePage() {
                 {/* Fluorescence image (proportional resize, centered) */}
                 {displayedLayer === 'fluorescence' && (
                   <img
-                    src={dataset?.fluorescence_url!}
+                    src={dataset?.fluorescence_url ?? undefined}
                     alt="Fluorescence"
                     className="w-full h-full block object-contain"
                     draggable={false}
@@ -624,13 +624,13 @@ export default function AnnotatePage() {
                 {displayedLayer === 'fluor_overlay' && (
                   <div className="absolute inset-0">
                     <img
-                      src={dataset?.fluorescence_url!}
+                      src={dataset?.fluorescence_url ?? undefined}
                       alt="Fluorescence"
                       className="w-full h-full block object-contain"
                       draggable={false}
                     />
                     <img
-                      src={dataset?.fluorescence_outline_url!}
+                      src={dataset?.fluorescence_outline_url ?? undefined}
                       alt="Fluorescence outline"
                       className="absolute inset-0 w-full h-full block object-contain"
                       draggable={false}
@@ -649,7 +649,7 @@ export default function AnnotatePage() {
                       draggable={false}
                     />
                     <img
-                      src={dataset?.fluorescence_outline_url!}
+                      src={dataset?.fluorescence_outline_url ?? undefined}
                       alt="Fluorescence outline"
                       className="absolute inset-0 w-full h-full block object-contain"
                       draggable={false}

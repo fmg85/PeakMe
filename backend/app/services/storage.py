@@ -4,12 +4,10 @@ Storage service — abstracts S3 operations.
 All S3 interactions in the app go through this module.
 To swap storage backends (e.g. Cloudflare R2, GCS), only this file changes.
 """
-import io
 import threading
 import uuid
 
 import boto3
-from botocore.exceptions import ClientError
 
 from app.config import settings
 

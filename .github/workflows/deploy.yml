@@ -3,6 +3,10 @@ name: Deploy to EC2
 on:
   push:
     branches: [main]
+  # Run the checks on PRs too (for the rare branch-and-PR flow); the deploy job
+  # below is guarded so PRs never deploy.
+  pull_request:
+    branches: [main]
   # Nightly catch-up: re-deploys if EC2 fell behind while push-triggered deploys
   # were failing (e.g. during an EC2 reboot window). Runs at 03:00 UTC daily.
   schedule:
@@ -10,8 +14,117 @@ on:
   # Manual trigger from GitHub Actions UI — use this to redeploy without a dummy commit.
   workflow_dispatch:
 
+# NOTE: app.config.Settings() requires several env vars just to *import* the app.
+# The checks below set throwaway values for them — none point at real
+# infrastructure and no repository secrets are used in the check jobs.
 jobs:
+  # ── Gate 1: backend boots and is free of real lint errors ──────────────────
+  backend-checks:
+    name: Backend lint + import smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11' # matches backend/Dockerfile
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+      - name: Install dependencies
+        working-directory: backend
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Ruff (undefined names, dead imports, syntax — not style)
+        working-directory: backend
+        run: ruff check app
+      - name: Import smoke (app boots / no import-time errors)
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql+psycopg://u:p@localhost:5432/db
+          SUPABASE_URL: https://example.supabase.co
+          SUPABASE_JWT_SECRET: ci-dummy
+          AWS_ACCESS_KEY_ID: ci-dummy
+          AWS_SECRET_ACCESS_KEY: ci-dummy
+          AWS_S3_BUCKET: ci-dummy
+        run: python -c "import app.main; print('app imports OK')"
+
+  # ── Gate 2: migrations apply cleanly from scratch on a real Postgres ───────
+  # This is the single highest-value gate: it stops a broken migration before it
+  # ever reaches the production database (deploy runs `alembic upgrade head`
+  # directly against prod).
+  migration-check:
+    name: Migrations apply on a clean DB
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/postgres
+      SUPABASE_URL: https://example.supabase.co
+      SUPABASE_JWT_SECRET: ci-dummy
+      AWS_ACCESS_KEY_ID: ci-dummy
+      AWS_SECRET_ACCESS_KEY: ci-dummy
+      AWS_S3_BUCKET: ci-dummy
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+      - name: Install dependencies
+        working-directory: backend
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: alembic upgrade head (from an empty database)
+        working-directory: backend
+        run: alembic upgrade head
+      - name: alembic check (model/migration drift — advisory, never blocks)
+        working-directory: backend
+        continue-on-error: true
+        run: alembic check
+
+  # ── Frontend lint + type-check ─────────────────────────────────────────────
+  # Fast PR-time feedback. NOTE: this does NOT gate the backend deploy below — the
+  # frontend ships via Vercel, not this workflow. The frontend's real deploy gate
+  # is its build (`npm run build` runs `tsc && eslint .` before `vite build`), so
+  # Vercel refuses to ship type errors or lint errors. A frontend problem must not
+  # block a backend deploy (and vice versa).
+  frontend-checks:
+    name: Frontend lint + type-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Type-check (tsc --noEmit)
+        working-directory: frontend
+        run: npx tsc -p tsconfig.json --noEmit
+      - name: Lint (eslint — bug-focused flat config)
+        working-directory: frontend
+        run: npm run lint
+
+  # ── Deploy (gated) ─────────────────────────────────────────────────────────
+  # Only runs if the backend checks pass. A red check skips the deploy and leaves
+  # prod on the last good commit. PRs run the checks but never deploy.
   deploy:
+    name: Deploy to EC2
+    needs: [backend-checks, migration-check]
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Deploy via SSH

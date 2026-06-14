@@ -70,6 +70,45 @@ These rules are enforced by CI (`.github/workflows/check-docs.yml`):
 - Pushing source changes without a CHANGELOG entry fails the build.
 - Pushing R script changes without updating both `docs/r-export-workflow.md` and `InstructionsPage.tsx` fails the build.
 
+## Testing — MANDATORY (scoped, not exhaustive)
+
+PeakMe deliberately does **not** chase coverage. The rule is narrow and risk-based:
+test the seams where a silent regression corrupts data, loses annotations, bypasses
+auth, or breaks the R round-trip — and nothing else. See `docs/adr/ADR-013-deploy-gated-ci.md`.
+
+**You MUST add or update a test in the same commit when you change any of:**
+
+| Boundary | Files | Why it's load-bearing |
+|---|---|---|
+| Auth / JWT | `backend/app/deps.py` | A regression = forged-token auth bypass or wrong-user data |
+| Ingestion | `backend/app/services/ingest.py` | Untrusted-input boundary; bad parsing scrambles the ion queue |
+| Offline sync | `frontend/src/lib/offline/**` | Hand-rolled IDB queue/reconciler; silent annotation data-loss |
+| Migrations | `backend/alembic/versions/*.py` | Runs against prod; a bad one is unrecoverable |
+| Export contract | `backend/app/routers/annotations.py` (CSV header/format) | ADR-010 — breaks every researcher's R import |
+| Ownership | `backend/app/routers/projects.py` (the 403 guard) | The app's only privilege boundary |
+
+**Everything else needs no test** — UI tweaks, copy, new pages, styling, refactors with
+no behaviour change. Do not add speculative tests for them.
+
+**The ratchet:** only write a test when (a) you touch a boundary above, or (b) a bug
+reached prod (add the regression test on the way out). The suite grows exactly as fast
+as real risk does — no faster.
+
+**Enforcement is automated, not manual** (`.github/workflows/deploy.yml`): every push to
+`main` runs `ruff` (bug-focused: `F`, `E9`), an app import smoke-test, and
+`alembic upgrade head` against a throwaway Postgres **before** the EC2 deploy. A failing
+check skips the deploy and leaves prod on the last good commit — direct push-to-main
+still works (e.g. from a mobile session); only broken code is blocked from shipping.
+
+Run locally:
+```bash
+# backend
+cd backend && pip install -r requirements.txt -r requirements-dev.txt
+ruff check app && pytest
+# frontend
+cd frontend && npx tsc -p tsconfig.json --noEmit && npm run lint
+```
+
 ## Commit conventions
 
 Use conventional commits — this feeds the CHANGELOG and makes git history readable:

@@ -7,7 +7,6 @@ uploads images to S3 in parallel, and creates Ion records in the database.
 import asyncio
 import csv
 import io
-import uuid
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path

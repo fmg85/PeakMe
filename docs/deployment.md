@@ -192,6 +192,21 @@ Once set, every push to `main` will SSH into EC2, rebuild the Docker containers,
 `alembic upgrade head`, and verify with a health check. If the health check fails, the
 workflow exits with an error — check the Actions log.
 
+### Deploy is gated on CI checks (ADR-013)
+
+The `deploy` job does not run until the check jobs in the same workflow pass:
+
+| Job | What it does |
+|---|---|
+| `backend-checks` | `ruff` (bug-focused) + `python -c 'import app.main'` import smoke-test |
+| `migration-check` | runs `alembic upgrade head` against a throwaway Postgres so a broken migration is caught **before** it touches the production DB; `alembic check` reports model/migration drift (advisory) |
+| `frontend-checks` | `tsc --noEmit` + `eslint .` (does not gate the backend deploy — the frontend ships via Vercel, whose build runs `tsc && eslint .` and refuses to ship type or lint errors) |
+
+A red `backend-checks` or `migration-check` **skips the deploy** and leaves prod on the
+last good commit — push-to-main still works, only broken code is blocked from shipping.
+Fix the failure and push again. The check jobs use throwaway env values and **no
+repository secrets**, so they also run safely on pull requests.
+
 > **Note:** The `.env` file on EC2 is **not** managed by GitHub Actions. If you rotate
 > secrets (AWS keys, Supabase JWT secret), SSH into EC2 and update `.env` manually,
 > then run `docker compose restart api`.

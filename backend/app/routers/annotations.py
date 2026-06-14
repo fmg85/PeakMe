@@ -7,14 +7,12 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
 
 from app.database import get_db
 from app.deps import CurrentUser
 from app.models.annotation import Annotation
 from app.models.dataset import Dataset
 from app.models.ion import Ion
-from app.models.project import Project
 from app.models.star import IonStar
 from app.models.user import User
 from app.schemas.annotation import GlobalStatsOut, LabelCount, StatsOut, UserStats

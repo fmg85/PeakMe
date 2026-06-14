@@ -1,0 +1,23 @@
+# Backend tooling config. Runtime deps live in requirements.txt; dev/CI-only
+# tooling lives in requirements-dev.txt.
+
+[tool.ruff]
+# Match the production runtime (backend/Dockerfile: python:3.11-slim).
+target-version = "py311"
+line-length = 100
+# Migrations are largely Alembic-generated and follow their own conventions —
+# don't lint them.
+extend-exclude = ["alembic"]
+
+[tool.ruff.lint]
+# Deliberately narrow: catch *real* problems — undefined names, unused/dead
+# imports, f-strings without placeholders, syntax errors — NOT style. This keeps
+# the deploy gate low-noise so a red check always means a genuine problem worth
+# stopping a deploy for. See docs/adr/ADR-013-deploy-gated-ci.md.
+select = ["F", "E9"]
+
+[tool.pytest.ini_options]
+# Suite lands incrementally (see CLAUDE.md "Testing"). asyncio_mode=auto lets
+# async test functions run without a per-test marker.
+asyncio_mode = "auto"
+testpaths = ["tests"]

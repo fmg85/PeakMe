@@ -1,0 +1,6 @@
+# Dev / CI-only tooling — NOT installed into the production Docker image.
+# Install locally with:  pip install -r requirements.txt -r requirements-dev.txt
+
+ruff==0.15.17          # linter used by the CI deploy gate (select = F, E9)
+pytest==8.3.4          # test runner (suite lands incrementally — see CLAUDE.md)
+pytest-asyncio==0.25.0 # async test support for the SQLAlchemy/FastAPI suite

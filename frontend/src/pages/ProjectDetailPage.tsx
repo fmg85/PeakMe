@@ -251,7 +251,7 @@ export default function ProjectDetailPage() {
       } catch (err: any) {
         // Clean up the orphaned pending record if upload or ingest call failed
         if (datasetId) {
-          try { await apiClient.delete(`/api/datasets/${datasetId}`, { timeout: UPLOAD_API_TIMEOUT }) } catch {}
+          try { await apiClient.delete(`/api/datasets/${datasetId}`, { timeout: UPLOAD_API_TIMEOUT }) } catch { /* best-effort cleanup; ignore */ }
         }
         updateItem(item.id, { status: 'error', error: err.response?.data?.detail || err.message || 'Upload failed' })
       }
