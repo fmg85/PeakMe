@@ -5,9 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "cp ../r-scripts/peakme_import.R public/peakme_import.R && cp ../r-scripts/peakme_export.R public/peakme_export.R && cp ../CHANGELOG.md public/CHANGELOG.md && tsc && eslint . && vite build",
+    "build": "cp ../r-scripts/peakme_import.R public/peakme_import.R && cp ../r-scripts/peakme_export.R public/peakme_export.R && cp ../CHANGELOG.md public/CHANGELOG.md && tsc && eslint . && vitest run && vite build",
     "preview": "vite preview",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.46.2",
@@ -27,10 +29,12 @@
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
     "eslint": "^9.15.0",
+    "fake-indexeddb": "^6.2.5",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.15",
     "typescript": "^5.6.3",
     "vite": "^6.0.3",
-    "vite-plugin-pwa": "^1.3.0"
+    "vite-plugin-pwa": "^1.3.0",
+    "vitest": "^2.1.9"
   }
 }

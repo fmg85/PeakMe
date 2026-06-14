@@ -41,7 +41,7 @@ The gating jobs:
 |---|---|---|
 | `backend-checks` | `ruff` (F, E9) + `python -c 'import app.main'` smoke | Yes |
 | `migration-check` | `alembic upgrade head` on a throwaway Postgres service; `alembic check` for drift (advisory) | Yes (upgrade); drift is advisory |
-| `frontend-checks` | `tsc --noEmit` + `eslint .` | No — frontend ships via Vercel; its real gate is the build (`tsc && eslint .` before `vite build`). Coupling the backend deploy to frontend checks would be wrong |
+| `frontend-checks` | `tsc --noEmit` + `eslint .` + `vitest run` | No — frontend ships via Vercel; its real gate is the build (`tsc && eslint . && vitest run` before `vite build`). Coupling the backend deploy to frontend checks would be wrong |
 
 ### 2. Ruff is bug-focused, not style-focused
 

@@ -117,6 +117,9 @@ jobs:
       - name: Lint (eslint — bug-focused flat config)
         working-directory: frontend
         run: npm run lint
+      - name: Unit tests (vitest — offline-sync suite)
+        working-directory: frontend
+        run: npm test
 
   # ── Deploy (gated) ─────────────────────────────────────────────────────────
   # Only runs if the backend checks pass. A red check skips the deploy and leaves

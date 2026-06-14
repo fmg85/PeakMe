@@ -106,7 +106,7 @@ Run locally:
 cd backend && pip install -r requirements.txt -r requirements-dev.txt
 ruff check app && pytest
 # frontend
-cd frontend && npx tsc -p tsconfig.json --noEmit && npm run lint
+cd frontend && npx tsc -p tsconfig.json --noEmit && npm run lint && npm test
 ```
 
 ## Commit conventions

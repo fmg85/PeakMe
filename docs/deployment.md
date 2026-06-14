@@ -200,7 +200,7 @@ The `deploy` job does not run until the check jobs in the same workflow pass:
 |---|---|
 | `backend-checks` | `ruff` (bug-focused) + `python -c 'import app.main'` import smoke-test |
 | `migration-check` | runs `alembic upgrade head` against a throwaway Postgres so a broken migration is caught **before** it touches the production DB; `alembic check` reports model/migration drift (advisory) |
-| `frontend-checks` | `tsc --noEmit` + `eslint .` (does not gate the backend deploy — the frontend ships via Vercel, whose build runs `tsc && eslint .` and refuses to ship type or lint errors) |
+| `frontend-checks` | `tsc --noEmit` + `eslint .` + `vitest run` (does not gate the backend deploy — the frontend ships via Vercel, whose build runs `tsc && eslint . && vitest run` and refuses to ship type errors, lint errors, or failing tests) |
 
 A red `backend-checks` or `migration-check` **skips the deploy** and leaves prod on the
 last good commit — push-to-main still works, only broken code is blocked from shipping.
