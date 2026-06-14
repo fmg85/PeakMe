@@ -227,7 +227,7 @@ export default function InstructionsPage() {
             >
               ↓ PeakMe Export
             </button>
-            <span className="text-xs text-gray-500">v1.1.0</span>
+            <span className="text-xs text-gray-500">v1.1.1</span>
           </div>
         </div>
       </header>

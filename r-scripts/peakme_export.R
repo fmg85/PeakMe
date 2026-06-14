@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 # =============================================================================
-# PeakMe: Annotation Import Script  [version 1.1.0 · 2026-03-30]
+# PeakMe: Annotation Import Script  [version 1.1.1 · 2026-06-14]
 # =============================================================================
 # Attaches PeakMe annotations back to your MSImagingExperiment.
 #
@@ -258,15 +258,11 @@ fd$peakme_confidence <- NA_integer_
 fd$peakme_annotator  <- NA_character_
 
 fd$peakme_label[feat_idx]   <- ann$label_name
-fd$peakme_starred[feat_idx] <- if ("starred" %in% colnames(ann))
-                                  as.logical(ann$starred)
-                                else NA
-fd$peakme_confidence[feat_idx] <- if ("confidence" %in% colnames(ann))
-                                     suppressWarnings(as.integer(ann$confidence))
-                                   else NA_integer_
-fd$peakme_annotator[feat_idx]  <- if ("annotator" %in% colnames(ann))
-                                     ann$annotator
-                                   else NA_character_
+# NB: keep each `else` on the same line as its `if` body — at the top level R's
+# parser treats a newline before `else` as ending the statement ("unexpected else").
+fd$peakme_starred[feat_idx]    <- if ("starred" %in% colnames(ann)) as.logical(ann$starred) else NA
+fd$peakme_confidence[feat_idx] <- if ("confidence" %in% colnames(ann)) suppressWarnings(as.integer(ann$confidence)) else NA_integer_
+fd$peakme_annotator[feat_idx]  <- if ("annotator" %in% colnames(ann)) ann$annotator else NA_character_
 
 fData(mse) <- fd
 

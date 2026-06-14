@@ -121,7 +121,11 @@ filename,mz_value
 
 ## PeakMe Export (PeakMe → R)
 
-After annotating in PeakMe, use `peakme_export.R` to attach labels back to your `MSImagingExperiment` and create a filtered object for downstream analysis.
+After annotating in PeakMe, use `peakme_export.R` (**v1.1.1**) to attach labels back to your `MSImagingExperiment` and create a filtered object for downstream analysis.
+
+> **v1.1.1 (2026-06-14):** fixes a parse error that prevented the script from running
+> via `source()` / `Rscript` (a top-level `if/else` with `else` on its own line). If you
+> downloaded an earlier copy and hit `unexpected 'else'`, re-download the latest.
 
 ### 5. Export Annotations from PeakMe
 
