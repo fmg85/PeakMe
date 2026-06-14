@@ -72,8 +72,14 @@ reached prod (regression test on the way out). See CLAUDE.md "Testing".
 - A ~2–3 min delay between push and prod (mostly the migration dry-run).
 - `alembic check` (drift) is advisory only — model/migration divergence surfaces as a
   non-fatal warning, not a hard failure, until the baseline is known-clean.
-- The post-deploy check is still the static `/health`; a fatal DB-touching readiness
-  probe is a planned follow-up.
+- `r-lint` is reporting-only (R scripts ship via Vercel, not this workflow), so it
+  surfaces a broken script but can't itself block the Vercel serve.
+
+**Resolved follow-ups (2026-06-14):** backend `pytest` suite added as a gating
+`backend-tests` job; the static `/health` post-deploy check replaced by a fatal
+`/readiness` probe (DB reachable + schema at the expected Alembic head); ESLint
+repaired (flat config) and wired into the build + CI; an `r-lint` job parses both R
+scripts (as-is and as-served).
 
 ## What to check when adding features
 

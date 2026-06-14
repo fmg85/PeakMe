@@ -189,8 +189,10 @@ cat your-key.pem
 ```
 
 Once set, every push to `main` will SSH into EC2, rebuild the Docker containers, run
-`alembic upgrade head`, and verify with a health check. If the health check fails, the
-workflow exits with an error — check the Actions log.
+`alembic upgrade head`, and verify with a **readiness check** (`/readiness` — DB
+reachable + schema migrated to the expected Alembic head, replacing the old static
+`/health`). If readiness fails after retries, the workflow exits with an error — check
+the Actions log.
 
 ### Deploy is gated on CI checks (ADR-013)
 
@@ -202,8 +204,9 @@ The `deploy` job does not run until the check jobs in the same workflow pass:
 | `migration-check` | runs `alembic upgrade head` against a throwaway Postgres so a broken migration is caught **before** it touches the production DB; `alembic check` reports model/migration drift (advisory) |
 | `backend-tests` | runs `pytest` against a throwaway `postgres:16` service — auth (JWT + account-merge), the annotate upsert, the queue cursor, and the ownership 403 |
 | `frontend-checks` | `tsc --noEmit` + `eslint .` + `vitest run` (does not gate the backend deploy — the frontend ships via Vercel, whose build runs `tsc && eslint . && vitest run` and refuses to ship type errors, lint errors, or failing tests) |
+| `r-lint` | parses both R scripts (as-is and with `\`→`/`) so a syntax error can't ship to researchers; reporting-only (R scripts ship via Vercel) |
 
-A red `backend-checks` or `migration-check` **skips the deploy** and leaves prod on the
+A red `backend-checks`, `migration-check`, or `backend-tests` **skips the deploy** and leaves prod on the
 last good commit — push-to-main still works, only broken code is blocked from shipping.
 Fix the failure and push again. The check jobs use throwaway env values and **no
 repository secrets**, so they also run safely on pull requests.

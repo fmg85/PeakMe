@@ -163,6 +163,30 @@ jobs:
         working-directory: frontend
         run: npm test
 
+  # ── R scripts parse ────────────────────────────────────────────────────────
+  # The R scripts are researcher-facing assets (copied into frontend/public and
+  # served by Vercel). A syntax error would ship with nothing else to catch it.
+  # We parse each script as-is AND with every `\` rewritten to `/` — a defensive
+  # guard for the historical "Vite rewrites backslashes" footgun. (Verified
+  # 2026-06-14 that no such rewrite currently happens — the deployed scripts are
+  # byte-identical to source — but the check is cheap insurance.)
+  # Reporting only: does NOT gate the backend deploy (R scripts ship via Vercel).
+  r-lint:
+    name: R scripts parse
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: r-lib/actions/setup-r@v2
+      - name: Parse each R script (as-is and as-served)
+        run: |
+          set -e
+          for f in r-scripts/*.R; do
+            Rscript -e "invisible(parse('$f')); cat('parsed:', '$f', '\n')"
+            served="/tmp/$(basename "$f")"
+            sed 's/\\/\//g' "$f" > "$served"
+            Rscript -e "invisible(parse('$served')); cat('parsed as-served:', '$f', '\n')"
+          done
+
   # ── Deploy (gated) ─────────────────────────────────────────────────────────
   # Only runs if the backend checks pass. A red check skips the deploy and leaves
   # prod on the last good commit. PRs run the checks but never deploy.
@@ -183,6 +207,17 @@ jobs:
           script: |
             set -e
             cd ~/PeakMe
+            # Deep readiness gate: process booted AND DB reachable AND schema migrated
+            # to the revision the new code expects. Retries to allow the container to
+            # come up (and a slow Supabase free-tier wakeup). Replaces the old static
+            # /health curl, which passed even with a broken DB or unmigrated schema.
+            check_ready() {
+              for i in 1 2 3 4 5 6; do
+                if curl -sf --max-time 15 http://localhost:8000/readiness; then return 0; fi
+                echo "not ready yet (attempt $i)..."; sleep 5
+              done
+              echo "Readiness check failed -- DB unreachable or schema not at head"; return 1
+            }
             git fetch origin main
             BEHIND=$(git rev-list HEAD..origin/main --count)
             if [ "$BEHIND" -gt 0 ]; then
@@ -191,13 +226,11 @@ jobs:
               docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
               docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T api alembic upgrade head
               docker image prune -f
-              sleep 5
-              curl -sf http://localhost:8000/health || (echo "Health check failed" && exit 1)
+              check_ready  # fatal — we just deployed; must be serving healthily
             else
               echo "EC2 is up to date ($(git rev-parse --short HEAD)) — skipping rebuild"
-              # Still verify health even if no deploy was needed
-              curl -sf http://localhost:8000/health || (echo "Health check failed" && exit 1)
-              # Keepalive: pings DB with SELECT 1 to prevent Supabase free-tier pause.
-              # Non-fatal — a slow wakeup after an unexpected pause shouldn't break the deploy.
-              curl -sf --max-time 60 http://localhost:8000/keepalive || echo "DB keepalive slow or failed (non-fatal)"
+              # No deploy happened. Readiness also pings the DB (SELECT 1), doubling as
+              # the Supabase keepalive. Non-fatal here so a slow free-tier wakeup doesn't
+              # fail the nightly catch-up run.
+              check_ready || echo "readiness slow or failed (non-fatal on a no-deploy run)"
             fi

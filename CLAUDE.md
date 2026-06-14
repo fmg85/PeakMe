@@ -32,11 +32,16 @@ specific new rule to this file in the same commit** so it doesn't recur.
 
 ## R script authoring rules
 
-- **Never use backslash escapes (`\"`, `\n`, `\t`) inside R string literals** in the R scripts.
-  Vercel/Vite converts every `\` to `/` when serving `.R` files from `public/`, causing parse errors.
-  Use single-quoted alternatives or restructure the string:
-  - Instead of `\"value\"` → use `'value'`
-  - Instead of `"\n"` for a newline in an error → just use `. ` (a space) or split into multiple `message()` calls
+- **Keep both scripts valid R.** CI (the `r-lint` job in `deploy.yml`) parses each script
+  on every push — both as written and with every `\` rewritten to `/` — and fails on a
+  syntax error, so a broken script can't reach researchers.
+  - *Historical note:* a `\`→`/` rewrite when serving `.R` from `public/` was once
+    suspected, hence an old "never use backslashes" rule. **Verified 2026-06-14** that the
+    deployed scripts are byte-identical to source (e.g. `\n` and regex `\\.` are served
+    verbatim and work), so backslash escapes are fine. The as-served parse in CI is a
+    defensive guard if that ever changes.
+  - Still avoid backslash-escaped **quotes** (`\"`) — those would break the as-served
+    parse (and are easy to replace with single quotes: `'value'`).
 - **Bump the version comment** on line 3 of each R script (`[version X.Y.Z · YYYY-MM-DD]`)
   and the matching version badge in `InstructionsPage.tsx` whenever the script changes.
 
