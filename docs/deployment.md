@@ -168,12 +168,24 @@ prove domain ownership. In production nginx holds port 80, so renewal **must sto
 first and start it again afterwards** — and it must run as **root**, because
 `/etc/letsencrypt` is root-only.
 
-Install it in **root's** crontab (`sudo crontab -e`, not `crontab -e`):
+Install it in **root's** crontab. Note this must be **one single line** — cron has no
+line-continuation syntax, and a trailing `\` is a parse error, not a continuation:
 
+```bash
+# Non-interactive install (no editor). Replaces any existing certbot line.
+C='/home/ubuntu/PeakMe/docker-compose.yml'
+P='/home/ubuntu/PeakMe/docker-compose.prod.yml'
+sudo crontab -l 2>/dev/null | grep -v certbot > /tmp/rootcron || true
+echo "0 3 * * * certbot renew --quiet --standalone --pre-hook \"docker compose -f $C -f $P stop nginx\" --post-hook \"docker compose -f $C -f $P start nginx\"" >> /tmp/rootcron
+sudo crontab /tmp/rootcron && rm /tmp/rootcron
+sudo crontab -l          # confirm: exactly one certbot line, unwrapped
 ```
-0 3 * * * certbot renew --quiet --standalone \
-  --pre-hook  "docker compose -f /home/ubuntu/PeakMe/docker-compose.yml -f /home/ubuntu/PeakMe/docker-compose.prod.yml stop nginx" \
-  --post-hook "docker compose -f /home/ubuntu/PeakMe/docker-compose.yml -f /home/ubuntu/PeakMe/docker-compose.prod.yml start nginx"
+
+Also remove the old broken entry from the **`ubuntu`** user's crontab, if present:
+
+```bash
+crontab -l 2>/dev/null | grep -v certbot | crontab -
+crontab -l
 ```
 
 The hooks only fire when a renewal is actually due, so nginx is not restarted nightly
