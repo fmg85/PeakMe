@@ -3,7 +3,8 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -152,34 +153,47 @@ async def annotate_ion(
     if not label:
         raise HTTPException(status_code=404, detail="Label option not found")
 
-    # Check for existing annotation (upsert)
-    existing_result = await db.execute(
+    # A single atomic upsert, as ADR-005 specifies. This was previously a SELECT
+    # followed by an INSERT-or-UPDATE, which is not safe: two concurrent requests for
+    # the same (ion_id, user_id) both saw no row and both INSERTed, and the second
+    # violated uq_annotation_ion_user and surfaced as an unhandled 500. That is
+    # reachable today — the offline sync flush replaying a queued annotate can race a
+    # direct tap on the same ion — and it gets more likely, not less, with more users.
+    stmt = (
+        pg_insert(Annotation)
+        .values(
+            ion_id=ion_id,
+            user_id=current_user.id,
+            label_option_id=body.label_option_id,
+            label_name=label.name,  # denormalized copy — see ADR-006
+            confidence=body.confidence,
+            time_spent_ms=body.time_spent_ms,
+        )
+        .on_conflict_do_update(
+            constraint="uq_annotation_ion_user",
+            set_={
+                "label_option_id": body.label_option_id,
+                "label_name": label.name,
+                "confidence": body.confidence,
+                "time_spent_ms": body.time_spent_ms,
+                # Must be set explicitly: the ORM-level `onupdate` does not fire for a
+                # Core insert, so omitting this silently freezes updated_at forever.
+                "updated_at": func.now(),
+            },
+        )
+    )
+    await db.execute(stmt)
+    await db.commit()
+
+    # Re-read for the response: RETURNING from a Core insert does not hand back a
+    # usable ORM instance for the response_model.
+    refreshed = await db.execute(
         select(Annotation).where(
             Annotation.ion_id == ion_id,
             Annotation.user_id == current_user.id,
         )
     )
-    annotation = existing_result.scalar_one_or_none()
-
-    if annotation:
-        annotation.label_option_id = body.label_option_id
-        annotation.label_name = label.name  # denormalized copy
-        annotation.confidence = body.confidence
-        annotation.time_spent_ms = body.time_spent_ms
-    else:
-        annotation = Annotation(
-            ion_id=ion_id,
-            user_id=current_user.id,
-            label_option_id=body.label_option_id,
-            label_name=label.name,
-            confidence=body.confidence,
-            time_spent_ms=body.time_spent_ms,
-        )
-        db.add(annotation)
-
-    await db.commit()
-    await db.refresh(annotation)
-    return annotation
+    return refreshed.scalar_one()
 
 
 @router.delete("/api/ions/{ion_id}/annotate", status_code=status.HTTP_204_NO_CONTENT)
@@ -213,6 +227,11 @@ async def toggle_star(
     if not result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Ion not found")
 
+    # Same race as annotate_ion: two concurrent toggles both saw no row and both
+    # INSERTed, and the second blew up on the (ion_id, user_id) primary key. Decide the
+    # direction from a read, but make the write itself idempotent so a lost race
+    # converges instead of 500-ing. The offline reconciler already re-reads the
+    # returned state and issues a corrective toggle, so converging is what it expects.
     star_result = await db.execute(
         select(IonStar).where(
             IonStar.ion_id == ion_id,
@@ -222,11 +241,19 @@ async def toggle_star(
     star = star_result.scalar_one_or_none()
 
     if star:
-        await db.delete(star)
+        await db.execute(
+            delete(IonStar).where(
+                IonStar.ion_id == ion_id,
+                IonStar.user_id == current_user.id,
+            )
+        )
         await db.commit()
         return {"starred": False}
-    else:
-        new_star = IonStar(ion_id=ion_id, user_id=current_user.id)
-        db.add(new_star)
-        await db.commit()
-        return {"starred": True}
+
+    await db.execute(
+        pg_insert(IonStar)
+        .values(ion_id=ion_id, user_id=current_user.id)
+        .on_conflict_do_nothing(index_elements=["ion_id", "user_id"])
+    )
+    await db.commit()
+    return {"starred": True}
