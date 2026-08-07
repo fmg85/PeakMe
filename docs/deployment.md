@@ -163,10 +163,56 @@ Without the `GET` rule, online annotation still works (images load via `<img>`),
 > This cron job references `/home/ubuntu/PeakMe/`. If your deploy user or repo path
 > differs, update the path accordingly before running.
 
-Create a cron job to auto-renew:
-```bash
-(crontab -l 2>/dev/null; echo "0 3 * * * certbot renew --quiet && docker compose -f /home/ubuntu/PeakMe/docker-compose.yml -f /home/ubuntu/PeakMe/docker-compose.prod.yml restart nginx") | crontab -
+The certificate was issued in **`--standalone`** mode (step 5), which binds port 80 to
+prove domain ownership. In production nginx holds port 80, so renewal **must stop nginx
+first and start it again afterwards** — and it must run as **root**, because
+`/etc/letsencrypt` is root-only.
+
+Install it in **root's** crontab (`sudo crontab -e`, not `crontab -e`):
+
 ```
+0 3 * * * certbot renew --quiet --standalone \
+  --pre-hook  "docker compose -f /home/ubuntu/PeakMe/docker-compose.yml -f /home/ubuntu/PeakMe/docker-compose.prod.yml stop nginx" \
+  --post-hook "docker compose -f /home/ubuntu/PeakMe/docker-compose.yml -f /home/ubuntu/PeakMe/docker-compose.prod.yml start nginx"
+```
+
+The hooks only fire when a renewal is actually due, so nginx is not restarted nightly
+for nothing.
+
+> **This step previously documented a command that could never work**, and the
+> certificate duly expired in production on 2026-08-07, taking the API down for every
+> user (and for Vercel's `/api/*` proxy). The old version was
+> `(crontab -l; echo "0 3 * * * certbot renew --quiet && … restart nginx") | crontab -`,
+> which fails twice over: it installs into the **`ubuntu` user's** crontab, where
+> `certbot` cannot read `/etc/letsencrypt`, and even as root `--standalone` cannot bind
+> port 80 while the nginx container holds it. It only *restarted* nginx afterwards,
+> never stopping it first. Both failures were silent.
+>
+> If you set up this box before 2026-08-07, remove the old entry from the `ubuntu`
+> crontab (`crontab -e`) and add the root one above.
+
+Verify renewal actually works — do not assume it:
+
+```bash
+sudo certbot certificates          # check the expiry date is in the future
+sudo certbot renew --dry-run \
+  --pre-hook  "docker compose -f /home/ubuntu/PeakMe/docker-compose.yml -f /home/ubuntu/PeakMe/docker-compose.prod.yml stop nginx" \
+  --post-hook "docker compose -f /home/ubuntu/PeakMe/docker-compose.yml -f /home/ubuntu/PeakMe/docker-compose.prod.yml start nginx"
+```
+
+To renew immediately (e.g. the certificate has already expired):
+
+```bash
+cd ~/PeakMe
+docker compose -f docker-compose.yml -f docker-compose.prod.yml stop nginx
+sudo certbot renew --force-renewal
+docker compose -f docker-compose.yml -f docker-compose.prod.yml start nginx
+curl -sS -w '\nHTTP %{http_code}\n' https://api.peakme.now/health
+```
+
+You should not have to rely on noticing this yourself: the `public-probe` CI job
+(step 10) fails the run if the public HTTPS endpoint is unreachable, and warns for
+14 days before the certificate expires.
 
 ## 10. Configure GitHub Actions (Automated Deploy)
 
@@ -214,6 +260,28 @@ repository secrets**, so they also run safely on pull requests.
 > **Note:** The `.env` file on EC2 is **not** managed by GitHub Actions. If you rotate
 > secrets (AWS keys, Supabase JWT secret), SSH into EC2 and update `.env` manually,
 > then run `docker compose restart api`.
+
+### CI checks the public endpoint, not just localhost (`public-probe`)
+
+Every other gate inspects the box **from inside the box** — the post-deploy readiness
+probe curls `http://localhost:8000/readiness`, which bypasses nginx, TLS and DNS. That
+is structurally blind to the entire public path: on 2026-08-07 the certificate expired,
+every user and the Vercel `/api/*` proxy got a TLS failure, and the deploy still
+reported green because localhost was perfectly healthy.
+
+The `public-probe` job is the only check that sees what a user sees. It runs **after**
+the deploy — the code should still ship — but turns the run red so a broken public
+endpoint is never reported as success. It:
+
+- requests `https://api.peakme.now/health` **with certificate validation on** (no
+  `curl -k` anywhere in that job — validating the chain *is* the test), retrying for
+  ~60s so a restarting nginx doesn't cause a false alarm;
+- fails the run on an expired or otherwise invalid certificate;
+- warns for `CERT_WARN_DAYS` (14) before expiry, so renewal breaking is visible long
+  before it becomes an outage.
+
+The hostname lives in the job's `PUBLIC_API_HOST` env var (a public DNS name, not a
+secret). Change it there if the domain changes.
 
 ### Enabling ML scoring (optional)
 

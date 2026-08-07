@@ -269,3 +269,63 @@ jobs:
                 echo "readiness slow or failed (non-fatal on a no-deploy run)"
               fi
             fi
+
+  # ── Public endpoint probe (gated on deploy) ────────────────────────────────
+  # Everything above this point checks the box from INSIDE the box: the readiness
+  # gate curls http://localhost:8000, which bypasses nginx, TLS and DNS entirely.
+  # That is structurally blind to the whole public path — on 2026-08-07 the Let's
+  # Encrypt certificate expired, every user (and Vercel's /api/* proxy) got a TLS
+  # failure, and the deploy still reported green because localhost was fine.
+  #
+  # This job is the only check that sees what a user sees. It deliberately runs
+  # AFTER the deploy: the code should still ship, but the run must go red so a
+  # broken public endpoint is never reported as a success.
+  public-probe:
+    name: Public HTTPS endpoint
+    needs: [deploy]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      # Public DNS name, not a secret. Must match the certificate's CN.
+      PUBLIC_API_HOST: api.peakme.now
+      # Warn this many days before the certificate expires.
+      CERT_WARN_DAYS: 14
+    steps:
+      - name: HTTPS reachable with a valid certificate
+        run: |
+          set -e
+          # No -k / --insecure anywhere in this job: validating the chain IS the test.
+          # Retries because nginx may still be restarting right after a deploy.
+          for i in 1 2 3 4 5 6; do
+            code=$(curl -sS -o /tmp/body -w '%{http_code}' --max-time 20 \
+                   "https://${PUBLIC_API_HOST}/health" 2>/tmp/err) && break || true
+            echo "attempt $i failed: $(cat /tmp/err)"; code=000; sleep 10
+          done
+          echo "HTTP $code"; cat /tmp/body 2>/dev/null || true; echo
+          if [ "$code" != "200" ]; then
+            echo "::error::Public HTTPS endpoint is NOT healthy (HTTP $code)."
+            echo "A TLS error here means users and the Vercel /api proxy are seeing the"
+            echo "same failure, even though the in-box readiness check passed."
+            cat /tmp/err 2>/dev/null || true
+            exit 1
+          fi
+
+      - name: Certificate expiry
+        run: |
+          set -e
+          ends=$(echo | openssl s_client -connect "${PUBLIC_API_HOST}:443" \
+                   -servername "${PUBLIC_API_HOST}" 2>/dev/null \
+                 | openssl x509 -noout -enddate | cut -d= -f2)
+          [ -n "$ends" ] || { echo "::error::Could not read the certificate."; exit 1; }
+          left=$(( ( $(date -d "$ends" +%s) - $(date +%s) ) / 86400 ))
+          echo "Certificate expires: $ends (${left} days)"
+          if [ "$left" -lt 0 ]; then
+            echo "::error::Certificate EXPIRED ${left#-} days ago — renewal is broken."
+            exit 1
+          fi
+          if [ "$left" -lt "$CERT_WARN_DAYS" ]; then
+            echo "::warning::Certificate expires in ${left} days. Renewal runs nightly"
+            echo "::warning::from root's crontab (docs/deployment.md section 9). If this"
+            echo "::warning::warning persists, renewal is failing silently — check"
+            echo "::warning::'sudo certbot certificates' and /var/log/letsencrypt/."
+          fi
