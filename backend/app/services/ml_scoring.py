@@ -17,7 +17,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
-from sqlalchemy import bindparam, select, update
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -120,18 +120,21 @@ async def score_dataset(dataset_id, db: AsyncSession) -> None:
     ranked = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)
     updates = [
         {
-            "ion_id": ion_ids[orig_idx],
-            "new_sort": new_rank,
+            "id": ion_ids[orig_idx],
+            "sort_order": new_rank,
             "ml_score": float(scores[orig_idx]),
         }
         for new_rank, orig_idx in enumerate(ranked)
     ]
 
-    # Atomic bulk update — rewrites sort_order and ml_score in a single commit
-    await db.execute(
-        update(Ion)
-        .where(Ion.id == bindparam("ion_id"))
-        .values(sort_order=bindparam("new_sort"), ml_score=bindparam("ml_score")),
-        updates,
-    )
+    # Atomic bulk update — rewrites sort_order and ml_score in a single commit.
+    #
+    # This MUST be the ORM "bulk UPDATE by primary key" form: `update(Ion)` with no
+    # .where()/.values(), and each dict keyed by the PK column name ("id"). The
+    # obvious-looking `update(Ion).where(Ion.id == bindparam("ion_id"))` variant is
+    # rejected outright ("bulk synchronize of persistent objects not supported when
+    # using bulk update with additional WHERE criteria"), and merely adding
+    # synchronize_session=None then fails with "No primary key value supplied for
+    # column(s) ions.id" because the row dicts are keyed "ion_id", not "id".
+    await db.execute(update(Ion), updates)
     await db.commit()

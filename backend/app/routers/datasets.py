@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status  # noqa: F401 — File/Form/UploadFile used by reference-images endpoint
@@ -74,12 +75,16 @@ async def _ingest_background_from_s3(s3_key: str, dataset_id: uuid.UUID) -> None
             await db.commit()
             return
 
-        # ML scoring — best-effort, never blocks dataset availability
+        # ML scoring — best-effort, never blocks dataset availability. Still LOG the
+        # failure: a bare `except: pass` here hid a bulk-UPDATE bug that made scoring a
+        # silent no-op on every dataset ever ingested, with nothing in the logs to say so.
         try:
             from app.services.ml_scoring import score_dataset
             await score_dataset(dataset_id, db)
         except Exception:
-            pass
+            logging.getLogger(__name__).exception(
+                "ML scoring failed for dataset %s — ions keep their upload order", dataset_id
+            )
 
 
 @router.get("/api/projects/{project_id}/datasets", response_model=list[DatasetOut])
