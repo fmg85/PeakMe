@@ -26,6 +26,14 @@ const annotate = (id: number): PendingMutation => ({
   clientTs: 0,
 })
 
+const unannotate = (id: number): PendingMutation => ({
+  id,
+  datasetId: 'd1',
+  ionId: `i${id}`,
+  type: 'unannotate',
+  clientTs: 0,
+})
+
 beforeEach(async () => {
   vi.clearAllMocks()
   vi.stubGlobal('navigator', { onLine: true }) // no navigator.locks → doFlush runs directly
@@ -157,6 +165,68 @@ describe('doFlush (offline replay reconciler)', () => {
 
     expect(db.getAllPending).not.toHaveBeenCalled()
     expect(post).not.toHaveBeenCalled()
+  })
+})
+
+describe('unannotate replay (undo must survive a failed flush)', () => {
+  it('keeps a queued undo when the DELETE fails with a network error', async () => {
+    // Regression: the network error used to be swallowed, so execution fell through
+    // to deletePending() and the undo was erased while the server kept the annotation.
+    vi.mocked(db.getAllPending).mockResolvedValue([unannotate(1)])
+    vi.mocked(db.getPendingById).mockImplementation(async (id) => unannotate(id))
+    const api = (await import('../apiClient')).default as any
+    api.delete.mockRejectedValue({ code: 'ERR_NETWORK' })
+
+    await sync.flushPendingMutations()
+
+    expect(db.deletePending).not.toHaveBeenCalled()
+    expect(sync.getSyncState().online).toBe(false)
+  })
+
+  it('keeps a queued undo when the DELETE times out', async () => {
+    vi.mocked(db.getAllPending).mockResolvedValue([unannotate(1)])
+    vi.mocked(db.getPendingById).mockImplementation(async (id) => unannotate(id))
+    const api = (await import('../apiClient')).default as any
+    api.delete.mockRejectedValue({ code: 'ECONNABORTED' })
+
+    await sync.flushPendingMutations()
+
+    expect(db.deletePending).not.toHaveBeenCalled()
+  })
+
+  it('stops the pass so later mutations are not skipped', async () => {
+    vi.mocked(db.getAllPending).mockResolvedValue([unannotate(1), unannotate(2)])
+    vi.mocked(db.getPendingById).mockImplementation(async (id) => unannotate(id))
+    const api = (await import('../apiClient')).default as any
+    api.delete.mockRejectedValue({ code: 'ERR_NETWORK' })
+
+    await sync.flushPendingMutations()
+
+    expect(api.delete).toHaveBeenCalledTimes(1)
+    expect(db.deletePending).not.toHaveBeenCalled()
+  })
+
+  it('still drops the undo on a genuine 404 (already absent on the server)', async () => {
+    vi.mocked(db.getAllPending).mockResolvedValue([unannotate(1)])
+    vi.mocked(db.getPendingById).mockImplementation(async (id) => unannotate(id))
+    const api = (await import('../apiClient')).default as any
+    api.delete.mockRejectedValue({ response: { status: 404 } })
+
+    await sync.flushPendingMutations()
+
+    expect(db.deletePending).toHaveBeenCalledWith(1)
+  })
+
+  it('deletes the undo after a successful DELETE', async () => {
+    vi.mocked(db.getAllPending).mockResolvedValue([unannotate(1)])
+    vi.mocked(db.getPendingById).mockImplementation(async (id) => unannotate(id))
+    const api = (await import('../apiClient')).default as any
+    api.delete.mockResolvedValue({ data: {} })
+
+    await sync.flushPendingMutations()
+
+    expect(api.delete).toHaveBeenCalledWith('/api/ions/i1/annotate')
+    expect(db.deletePending).toHaveBeenCalledWith(1)
   })
 })
 

@@ -121,8 +121,16 @@ export default function AnnotatePage() {
     {}
   )
 
+  // `current` does not change until advance() runs inside the 320ms fly-off timer, so
+  // without this guard every extra key press or swipe in that window re-annotates the
+  // SAME ion (last one wins, overwriting the label meant for the next card) and queues
+  // another advance(), each of which drops an ion from the queue unseen and unannotated.
+  const annotatingRef = useRef(false)
+
   const annotate = useCallback(async (label: LabelOption, direction: AnimDirection = 'right') => {
     if (!current) return
+    if (annotatingRef.current) return
+    annotatingRef.current = true
     const snapshot = current  // capture before async
     const wasAlreadyAnnotated = !!snapshot.annotation  // don't inflate counter on re-annotation
     setAnim(direction)
@@ -132,10 +140,14 @@ export default function AnnotatePage() {
       setSessionReviewed((n) => n + 1)
       if (!wasAlreadyAnnotated) setSessionAnnotations((n) => n + 1)
     } catch {
+      // Must clear here too: this path returns before the timeout below, so releasing
+      // the guard only in the timer would wedge annotation permanently after one
+      // failed POST — worse than the bug this guard fixes.
+      annotatingRef.current = false
       setAnim(null)
       return
     }
-    setTimeout(() => { advance(); setAnim(null) }, 320)
+    setTimeout(() => { advance(); setAnim(null); annotatingRef.current = false }, 320)
   }, [current, advance, datasetId])
 
   const toggleStar = useCallback(async () => {
@@ -209,6 +221,9 @@ export default function AnnotatePage() {
     const labels = project?.label_options ?? []
     const handleKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+      // Held keys auto-repeat at ~30/sec. Without this, holding a label shortcut a
+      // fraction too long re-fires annotate() on the same card dozens of times.
+      if (e.repeat) return
       if (e.key === 's' || e.key === 'S') { toggleStar(); return }
       if (e.key === 'z' || e.key === 'Z') { undo(); return }
       const label = labels.find((l) => l.keyboard_shortcut === e.key)

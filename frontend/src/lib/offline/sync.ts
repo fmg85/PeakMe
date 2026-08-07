@@ -107,8 +107,12 @@ async function doFlush(): Promise<void> {
           try {
             await apiClient.delete(`/api/ions/${m.ionId}/annotate`)
           } catch (err) {
-            // 404 = already absent on the server; treat as done.
-            if (!isNetworkError(err) && (err as { response?: { status?: number } }).response?.status !== 404) throw err
+            // ONLY a genuine 404 means "already absent on the server, treat as done".
+            // Everything else — crucially a network error or timeout — must rethrow so
+            // the outer catch parks the mutation. Swallowing it here would fall through
+            // to deletePending() below and erase an undo the server never received,
+            // leaving the annotation live on the server and gone locally.
+            if ((err as { response?: { status?: number } }).response?.status !== 404) throw err
           }
         } else if (m.type === 'star') {
           // The endpoint toggles, so converge toward the desired state (≤2 calls). Only
