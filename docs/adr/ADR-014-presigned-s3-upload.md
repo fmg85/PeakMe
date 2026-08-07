@@ -1,4 +1,4 @@
-# ADR-011: Presigned S3 URLs for ZIP uploads
+# ADR-014: Presigned S3 URLs for ZIP uploads
 
 **Date:** 2026-05-21  
 **Status:** Accepted

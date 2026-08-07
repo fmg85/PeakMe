@@ -236,6 +236,17 @@ The workflow also runs on a **nightly schedule (03:00 UTC)** as a catch-up mecha
 if a push-triggered deploy failed (e.g. during an EC2 reboot), the server will
 self-heal within 24 hours. It skips the rebuild if EC2 is already on the latest commit.
 
+> **GitHub disables scheduled workflows after 60 days of repository inactivity.**
+> (`push:` and `workflow_dispatch:` triggers are never disabled — only `schedule:`.)
+> GitHub emails a warning shortly before it happens; re-enable from
+> **Actions → Deploy to EC2**, and note that *any* push resets the 60-day counter.
+>
+> If it does lapse, the only thing lost is the catch-up redeploy. Keeping the
+> database awake does **not** depend on it: the API pings its own DB every 6h from
+> a background task, so a dormant repo can no longer cause a Supabase pause
+> (see ADR-015). Adding another *scheduled* workflow to prevent this would not
+> work — it would be disabled by the same rule.
+
 To trigger a deploy immediately without pushing a commit, go to:
 **GitHub → Actions → Deploy to EC2 → Run workflow**.
 
@@ -266,6 +277,24 @@ docker compose ps
 # View resource usage
 docker stats
 ```
+
+### Database keepalive
+
+The Supabase free tier pauses a project after ~1 week of inactivity, which would take
+the API and all annotation data offline until manually restored. The API prevents this
+itself: a background task pings the DB (`SELECT 1`) every 6h for as long as the
+container is running (ADR-015). No external scheduler is involved.
+
+```bash
+# Confirm the keepalive is alive (logs at DEBUG; failures log at WARNING)
+docker compose logs api | grep -i keepalive
+
+# Ping on demand
+curl -sf http://localhost:8000/keepalive
+```
+
+A `Keepalive ping failed` warning is only a concern if it repeats for more than a day —
+the 6h interval leaves a ~28× margin under the ~1 week pause threshold.
 
 ## 14. Backup
 

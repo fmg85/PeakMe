@@ -9,6 +9,12 @@ on:
     branches: [main]
   # Nightly catch-up: re-deploys if EC2 fell behind while push-triggered deploys
   # were failing (e.g. during an EC2 reboot window). Runs at 03:00 UTC daily.
+  #
+  # NOTE: GitHub disables `schedule:` triggers after 60 days of repository
+  # inactivity (push/workflow_dispatch are never disabled). Losing this costs
+  # only the catch-up redeploy — the Supabase keepalive no longer depends on it,
+  # because the API pings its own DB from a lifespan task (ADR-015). Re-enable
+  # from the Actions tab if it lapses; any push resets the 60-day counter.
   schedule:
     - cron: '0 3 * * *'
   # Manual trigger from GitHub Actions UI — use this to redeploy without a dummy commit.
@@ -229,8 +235,9 @@ jobs:
               check_ready  # fatal — we just deployed; must be serving healthily
             else
               echo "EC2 is up to date ($(git rev-parse --short HEAD)) — skipping rebuild"
-              # No deploy happened. Readiness also pings the DB (SELECT 1), doubling as
-              # the Supabase keepalive. Non-fatal here so a slow free-tier wakeup doesn't
-              # fail the nightly catch-up run.
+              # No deploy happened. Readiness also pings the DB (SELECT 1), which is a
+              # secondary Supabase keepalive — the primary one is the API's own lifespan
+              # task, which does not depend on this workflow being enabled (ADR-015).
+              # Non-fatal here so a slow free-tier wakeup doesn't fail the catch-up run.
               check_ready || echo "readiness slow or failed (non-fatal on a no-deploy run)"
             fi

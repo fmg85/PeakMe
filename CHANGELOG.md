@@ -7,6 +7,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## 2026-08-07
 
+- fix: the database keepalive no longer depends on GitHub Actions. GitHub disables `schedule:` triggers after 60 days of repository inactivity, and the nightly workflow was the only thing pinging the DB — so a quiet repo would have silently stopped the keepalive, letting the Supabase free tier pause the project ~7 days later and taking the app **and its annotation data** offline until manually restored. The failure mode was self-concealing (push-triggered deploys keep working) and unfixable with another scheduled workflow, since the same rule would disable that one too. The API now pings its own DB every 6h from a lifespan task, independent of GitHub, CI, and repo activity (ADR-015, 6 tests)
+- docs: two ADRs were both numbered 011, making "see ADR-011" ambiguous — the presigned-S3 one is now ADR-014 (nothing referenced it externally)
 - fix: dataset and project deletes are now reliable — S3 cleanup moved off the async event loop (`run_in_executor`), `passive_deletes=True` on all cascade relationships so SQLAlchemy trusts the DB-level `ON DELETE CASCADE` instead of loading every child row first, and delete calls get a 30s timeout instead of the global 10s. Deleting a large dataset or project no longer intermittently times out
 - fix: project delete now also removes the S3 images for all of its datasets (previously orphaned in the bucket)
 - fix: a failed delete now shows an error instead of silently doing nothing
