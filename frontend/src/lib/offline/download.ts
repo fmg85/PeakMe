@@ -72,8 +72,28 @@ export async function downloadDatasetForOffline(opts: DownloadOptions): Promise<
   const datasetId = dataset.id
 
   // 1. Page the queue into a flat list of ion snapshots.
+  //
+  // The dialog promises the *next* N ions, so start at the first one the user hasn't
+  // annotated — not at sort_order 0. Paging from -1 meant that on a half-annotated
+  // dataset the entire offline copy was ions already finished; offline Resume then
+  // filtered them all out and rendered "All done!" over an untouched backlog.
+  //
+  // Probe for the boundary, then page with strategy 'all' from there rather than
+  // switching to 'unannotated_first' outright: the same snapshot also backs "Review
+  // all" and "Review by label", which need annotated ions present to show anything.
   const items: IonQueueItem[] = []
   let cursor = -1
+  try {
+    const { data: probe } = await apiClient.get<IonQueueItem[]>(`/api/datasets/${datasetId}/ions/queue`, {
+      params: { limit: 1, strategy: 'unannotated_first', after_sort_order: -1 },
+    })
+    // No unannotated ions left → dataset is complete; fall back to the start so a
+    // download for review purposes still returns something.
+    if (probe.length > 0) cursor = probe[0].sort_order - 1
+  } catch {
+    // Probe is an optimisation, not a requirement — fall back to paging from the start.
+  }
+
   while (items.length < count) {
     if (signal?.aborted) throw new DOMException('aborted', 'AbortError')
     const { data } = await apiClient.get<IonQueueItem[]>(`/api/datasets/${datasetId}/ions/queue`, {

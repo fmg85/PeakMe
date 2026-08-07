@@ -27,6 +27,9 @@ export function useAnnotationQueue({ datasetId, strategy = 'unannotated_first', 
   // Prevents prefetch effect from firing before the initial batch completes
   const initializedRef = useRef(false)
 
+  const servedOfflineRef = useRef(false)
+  const [offlineLimited, setOfflineLimited] = useState(false)
+
   const forceReload = useCallback(() => setReloadKey((k) => k + 1), [])
 
   const fetchBatch = useCallback(async (afterSortOrder: number): Promise<IonQueueItem[]> => {
@@ -41,8 +44,13 @@ export function useAnnotationQueue({ datasetId, strategy = 'unannotated_first', 
     } catch (err) {
       // Offline / backend unreachable: serve from the downloaded snapshot if present.
       if (isNetworkError(err) && (await getOfflineDataset(datasetId))) {
+        // Remember that this batch came from the local snapshot. Running out of
+        // snapshot is NOT the same as having annotated everything, and conflating
+        // them renders a triumphant "All done!" over an untouched backlog.
+        servedOfflineRef.current = true
         return fetchOfflineBatch(datasetId, { strategy, labelFilter, afterSortOrder, limit: BATCH_SIZE })
       }
+      servedOfflineRef.current = false
       throw err
     }
   }, [datasetId, strategy, labelFilter])
@@ -54,10 +62,15 @@ export function useAnnotationQueue({ datasetId, strategy = 'unannotated_first', 
     setCursor(-1)
     setExhausted(false)
     setLoadError(false)
+    setOfflineLimited(false)
+    servedOfflineRef.current = false
     fetchBatch(-1).then((items) => {
       setQueue(items)
       if (items.length > 0) setCursor(items[items.length - 1].sort_order)
-      if (items.length < BATCH_SIZE) setExhausted(true)
+      if (items.length < BATCH_SIZE) {
+        setExhausted(true)
+        if (servedOfflineRef.current) setOfflineLimited(true)
+      }
       items.forEach((item) => {
         prefetchImage(item.image_url)
         if (item.tic_image_url) prefetchImage(item.tic_image_url)
@@ -80,7 +93,10 @@ export function useAnnotationQueue({ datasetId, strategy = 'unannotated_first', 
       fetchBatch(cursor).then((items) => {
         setQueue((prev) => [...prev, ...items])
         if (items.length > 0) setCursor(items[items.length - 1].sort_order)
-        if (items.length < BATCH_SIZE) setExhausted(true)
+        if (items.length < BATCH_SIZE) {
+          setExhausted(true)
+          if (servedOfflineRef.current) setOfflineLimited(true)
+        }
         items.forEach((item) => {
           prefetchImage(item.image_url)
           if (item.tic_image_url) prefetchImage(item.tic_image_url)
@@ -112,7 +128,7 @@ export function useAnnotationQueue({ datasetId, strategy = 'unannotated_first', 
     })
   }, [])
 
-  return { current, remaining, advance, updateCurrent, exhausted, loadError, forceReload, prependItem }
+  return { current, remaining, advance, updateCurrent, exhausted, offlineLimited, loadError, forceReload, prependItem }
 }
 
 function prefetchImage(url: string) {

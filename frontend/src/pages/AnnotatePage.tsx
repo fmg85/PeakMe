@@ -91,7 +91,7 @@ export default function AnnotatePage() {
     enabled: !!datasetId,
   })
 
-  const { current, advance, updateCurrent, exhausted, loadError, forceReload, prependItem } = useAnnotationQueue({
+  const { current, advance, updateCurrent, exhausted, offlineLimited, loadError, forceReload, prependItem } = useAnnotationQueue({
     datasetId,
     strategy,
     labelFilter,
@@ -493,12 +493,16 @@ export default function AnnotatePage() {
           </div>
         ) : exhausted && !current ? (
           <div className="text-center space-y-4 max-w-sm w-full">
-            <div className="text-5xl">🎉</div>
+            <div className="text-5xl">{offlineLimited ? '📥' : '🎉'}</div>
             <h2 className="text-xl font-semibold text-white">
-              {strategy === 'unannotated_first' ? 'All done!' : strategy === 'starred_first' ? 'No starred ions' : 'End of dataset'}
+              {offlineLimited
+                ? 'End of your offline copy'
+                : strategy === 'unannotated_first' ? 'All done!' : strategy === 'starred_first' ? 'No starred ions' : 'End of dataset'}
             </h2>
             <p className="text-gray-400">
-              {strategy === 'unannotated_first'
+              {offlineLimited
+                ? "That's everything in the ions you downloaded — not necessarily the whole dataset. Reconnect to keep going, or download more ions."
+                : strategy === 'unannotated_first'
                 ? `You've annotated all ${total.toLocaleString()} ions in this dataset.`
                 : strategy === 'starred_first'
                 ? 'No starred ions found.'
