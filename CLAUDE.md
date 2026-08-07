@@ -30,6 +30,46 @@ If you notice you have made the **same documentation or process mistake more tha
 a CHANGELOG entry, forgot to update `docs/setup.md` after an auth change), **add a
 specific new rule to this file in the same commit** so it doesn't recur.
 
+## Silent failure — the defect class that keeps happening here
+
+On 2026-08-07 an audit found six independent bugs in this repo. Every one was the same
+shape: **a check that could not observe the thing it claimed to verify.** None broke
+loudly; all were invisible by construction.
+
+| What was "protected" | Why nothing noticed |
+|---|---|
+| ML score ranking | `except Exception: pass` swallowed a bulk-UPDATE error — dead on all 291,371 ions for months |
+| Prod schema matching the code | A failed migration latched, and the retry path skipped the migration and swallowed six 503s |
+| Supabase not pausing | The keepalive lived in a scheduled workflow GitHub disables after 60 days of repo inactivity — it would die exactly when the repo went quiet, i.e. when it was needed |
+| Offline undo reaching the server | A network error deleted the queued mutation anyway |
+| HTTPS being up | Every check curled `localhost`, which cannot see TLS, nginx or DNS |
+| Certificate renewal | The documented cron could never have run; it failed nightly for 90 days until the cert expired |
+
+**The rule: when you add a safety mechanism, ask what would tell you it stopped
+working. If the honest answer is "the thing it protects against, happening" — it is not
+a safety mechanism yet, it is a hope.**
+
+That single question would have caught all six before they mattered. Apply it whenever
+you add a fallback, retry, health check, scheduled job, or `except`.
+
+Three concrete rules follow. All three are enforced:
+
+1. **Verify from outside the boundary.** A check that runs inside the system cannot see
+   the system's edges. The `public-probe` CI job requests the real public HTTPS URL with
+   certificate validation on; it caught a live outage the in-box readiness gate reported
+   as green.
+2. **Never let a failure be silent.** `ruff` rejects `except: pass` (S110/E722). Swallowing
+   is still right sometimes — best-effort S3 cleanup — but it must be deliberate: log the
+   exception, or add `# noqa: S110` saying why silence is correct.
+3. **Prove the recovery path; do not just configure it.** Exercise the path that will
+   actually run, not a convenient approximation of it. A `--dry-run` that passes extra
+   flags proves those flags work, not that cron works. When you fix a bug, make the test
+   fail against the old code before you trust it.
+
+Corollary for expiring or scheduled things (certs, tokens, cron): add a warning that
+fires *well before* the deadline, so a broken renewal surfaces as a warning rather than
+an outage.
+
 ## R script authoring rules
 
 - **Keep both scripts valid R.** CI (the `r-lint` job in `deploy.yml`) parses each script
