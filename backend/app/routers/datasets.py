@@ -240,10 +240,22 @@ async def delete_dataset(
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(Dataset).where(Dataset.id == dataset_id))
-    dataset = result.scalar_one_or_none()
-    if not dataset:
+    # Authorization matters here specifically because the delete is unrecoverable:
+    # ON DELETE CASCADE takes ions -> annotations, so this destroys EVERY user's
+    # annotations for the dataset, and then the S3 prefix. Ownership lives on the
+    # parent project (datasets have no created_by), so mirror the rule enforced by
+    # delete_project. Read endpoints stay intentionally shared — see tests/test_projects.py.
+    result = await db.execute(
+        select(Dataset, Project)
+        .join(Project, Project.id == Dataset.project_id)
+        .where(Dataset.id == dataset_id)
+    )
+    row = result.first()
+    if row is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
+    dataset, project = row
+    if project.created_by != current_user.id and not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Not authorized")
 
     await db.delete(dataset)
     await db.commit()
