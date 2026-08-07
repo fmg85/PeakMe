@@ -168,15 +168,25 @@ prove domain ownership. In production nginx holds port 80, so renewal **must sto
 first and start it again afterwards** — and it must run as **root**, because
 `/etc/letsencrypt` is root-only.
 
-Install it in **root's** crontab. Note this must be **one single line** — cron has no
-line-continuation syntax, and a trailing `\` is a parse error, not a continuation:
+**Put the hooks in `/etc/letsencrypt/renewal-hooks/`, not in the cron line.** Scripts
+there run for *every* renewal path — your cron, certbot's own systemd timer, and any
+manual `certbot renew`. Defining them only in the cron means the systemd timer still
+runs an unhooked `certbot renew`, which cannot bind port 80 and fails.
 
 ```bash
-# Non-interactive install (no editor). Replaces any existing certbot line.
-C='/home/ubuntu/PeakMe/docker-compose.yml'
-P='/home/ubuntu/PeakMe/docker-compose.prod.yml'
+sudo mkdir -p /etc/letsencrypt/renewal-hooks/{pre,post}
+printf '#!/bin/sh\ndocker compose -f /home/ubuntu/PeakMe/docker-compose.yml -f /home/ubuntu/PeakMe/docker-compose.prod.yml stop nginx\n' | sudo tee /etc/letsencrypt/renewal-hooks/pre/stop-nginx.sh
+printf '#!/bin/sh\ndocker compose -f /home/ubuntu/PeakMe/docker-compose.yml -f /home/ubuntu/PeakMe/docker-compose.prod.yml start nginx\n' | sudo tee /etc/letsencrypt/renewal-hooks/post/start-nginx.sh
+sudo chmod +x /etc/letsencrypt/renewal-hooks/{pre,post}/*.sh
+```
+
+Then the cron entry is trivial — install it in **root's** crontab (`sudo crontab -e`,
+not `crontab -e`; certbot needs root to read `/etc/letsencrypt`). One line: cron has no
+line-continuation syntax, and a trailing `\` is a parse error, not a continuation.
+
+```bash
 sudo crontab -l 2>/dev/null | grep -v certbot > /tmp/rootcron || true
-echo "0 3 * * * certbot renew --quiet --standalone --pre-hook \"docker compose -f $C -f $P stop nginx\" --post-hook \"docker compose -f $C -f $P start nginx\"" >> /tmp/rootcron
+echo "0 3 * * * certbot renew --quiet --standalone" >> /tmp/rootcron
 sudo crontab /tmp/rootcron && rm /tmp/rootcron
 sudo crontab -l          # confirm: exactly one certbot line, unwrapped
 ```
@@ -185,8 +195,11 @@ Also remove the old broken entry from the **`ubuntu`** user's crontab, if presen
 
 ```bash
 crontab -l 2>/dev/null | grep -v certbot | crontab -
-crontab -l
 ```
+
+> Do not define the hooks in *both* places. Certbot runs directory hooks **and**
+> `--pre-hook`/`--post-hook`, so nginx would be stopped and started twice per renewal.
+> Harmless (Docker stop/start are idempotent) but confusing.
 
 The hooks only fire when a renewal is actually due, so nginx is not restarted nightly
 for nothing.
@@ -207,9 +220,9 @@ Verify renewal actually works — do not assume it:
 
 ```bash
 sudo certbot certificates          # check the expiry date is in the future
-sudo certbot renew --dry-run \
-  --pre-hook  "docker compose -f /home/ubuntu/PeakMe/docker-compose.yml -f /home/ubuntu/PeakMe/docker-compose.prod.yml stop nginx" \
-  --post-hook "docker compose -f /home/ubuntu/PeakMe/docker-compose.yml -f /home/ubuntu/PeakMe/docker-compose.prod.yml start nginx"
+# No inline hooks — this proves the /etc/letsencrypt/renewal-hooks/ scripts fire,
+# which is what cron and the systemd timer will actually rely on.
+sudo certbot renew --dry-run
 ```
 
 To renew immediately (e.g. the certificate has already expired):
