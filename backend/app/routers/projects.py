@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -107,10 +108,15 @@ async def delete_project(
     await db.delete(project)
     await db.commit()
 
-    # Clean up S3 images for all datasets (best-effort, off the event loop)
+    # Clean up S3 images for all datasets (best-effort, off the event loop). Best-effort
+    # means "don't fail the request", NOT "don't tell anyone" — a silent failure here
+    # leaks orphaned S3 objects that nothing else will ever notice.
     loop = asyncio.get_running_loop()
     for ds_id in dataset_ids:
         try:
             await loop.run_in_executor(None, delete_dataset_images, ds_id)
         except Exception:
-            pass
+            logging.getLogger(__name__).exception(
+                "S3 cleanup failed for dataset %s — objects orphaned under datasets/%s/",
+                ds_id, ds_id,
+            )

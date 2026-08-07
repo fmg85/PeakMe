@@ -266,12 +266,17 @@ async def delete_dataset(
     await db.delete(dataset)
     await db.commit()
 
-    # Clean up S3 after DB delete (best-effort, off the event loop)
+    # Clean up S3 after DB delete (best-effort, off the event loop). Best-effort means
+    # "don't fail the request", NOT "don't tell anyone" — a silent failure here leaks
+    # orphaned S3 objects that nothing else will ever notice or bill you for knowingly.
     loop = asyncio.get_running_loop()
     try:
         await loop.run_in_executor(None, delete_dataset_images, dataset_id)
     except Exception:
-        pass
+        logging.getLogger(__name__).exception(
+            "S3 cleanup failed for dataset %s — objects orphaned under datasets/%s/",
+            dataset_id, dataset_id,
+        )
 
 
 @router.patch("/api/datasets/{dataset_id}/reference-images", response_model=DatasetOut)

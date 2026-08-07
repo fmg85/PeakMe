@@ -14,7 +14,14 @@ extend-exclude = ["alembic"]
 # imports, f-strings without placeholders, syntax errors — NOT style. This keeps
 # the deploy gate low-noise so a red check always means a genuine problem worth
 # stopping a deploy for. See docs/adr/ADR-013-deploy-gated-ci.md.
-select = ["F", "E9"]
+#
+# S110/E722 are here for one specific reason: `except: pass` hid the fact that ML
+# scoring raised on *every* dataset for months (2026-08-07). A swallowed exception
+# is invisible by construction — it produces no log line, no metric, no symptom, so
+# nothing can ever alert on it. Swallowing is sometimes right (best-effort S3
+# cleanup), but it must be a deliberate, reviewed choice: log the exception, or add
+# an explicit `# noqa: S110` saying why silence is correct here.
+select = ["F", "E9", "S110", "E722"]
 
 [tool.pytest.ini_options]
 # asyncio_mode=auto runs async tests/fixtures without a per-test marker.
