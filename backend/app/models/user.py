@@ -17,6 +17,14 @@ class User(Base):
     display_name: Mapped[str] = mapped_column(String(100), nullable=False)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Accounts sharing a non-NULL identity_group_id belong to the same person.
+    # Supabase mints a separate user per auth method and per email address, so one
+    # human easily ends up with several — and ownership points at a single users.id.
+    # NULL means "this account is its own identity", which is the default for every
+    # existing row. See ADR-016.
+    identity_group_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

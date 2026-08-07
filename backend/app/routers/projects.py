@@ -11,6 +11,7 @@ from app.deps import CurrentUser
 from app.models.dataset import Dataset
 from app.models.project import Project
 from app.schemas.project import ProjectCreate, ProjectOut, ProjectUpdate
+from app.services.ownership import can_modify_project
 from app.services.storage import delete_dataset_images
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
@@ -74,7 +75,7 @@ async def update_project(
     project = result.scalar_one_or_none()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    if project.created_by != current_user.id and not current_user.is_admin:
+    if not await can_modify_project(db, project, current_user):
         raise HTTPException(status_code=403, detail="Not authorized")
     if body.name is not None:
         project.name = body.name
@@ -96,7 +97,7 @@ async def delete_project(
     project = result.scalar_one_or_none()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    if project.created_by != current_user.id and not current_user.is_admin:
+    if not await can_modify_project(db, project, current_user):
         raise HTTPException(status_code=403, detail="Not authorized")
 
     # Collect dataset IDs for S3 cleanup before deletion

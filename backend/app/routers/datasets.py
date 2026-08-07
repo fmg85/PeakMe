@@ -14,6 +14,7 @@ from app.models.ion import Ion
 from app.models.project import Project
 from app.schemas.dataset import DatasetLabelSummary, DatasetOut, LabelCount
 from app.services.ingest import IngestError, ingest_zip
+from app.services.ownership import can_modify_project
 from app.services.storage import (
     delete_dataset_images,
     delete_file,
@@ -259,7 +260,7 @@ async def delete_dataset(
     if row is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
     dataset, project = row
-    if project.created_by != current_user.id and not current_user.is_admin:
+    if not await can_modify_project(db, project, current_user):
         raise HTTPException(status_code=403, detail="Not authorized")
 
     await db.delete(dataset)
