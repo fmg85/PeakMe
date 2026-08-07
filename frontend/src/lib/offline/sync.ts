@@ -10,7 +10,7 @@
 import { useSyncExternalStore } from 'react'
 import apiClient from '../apiClient'
 import { supabase } from '../supabaseClient'
-import { countPending, deletePending, getAllPending, getPendingById } from './db'
+import { countPending, deletePending, getAllPending, getPendingById, isOwnedBy } from './db'
 
 export interface SyncState {
   online: boolean
@@ -47,7 +47,16 @@ export function useSyncStatus(): SyncState {
 
 export async function refreshPendingCount() {
   try {
-    setState({ pending: await countPending() })
+    // Scoped to the signed-in user for the same reason the flush is: otherwise the
+    // badge shows a count that includes another account's rows and never clears,
+    // because this user's flush will never touch them.
+    let userId: string | undefined
+    try {
+      userId = (await supabase.auth.getSession()).data.session?.user?.id
+    } catch {
+      userId = undefined
+    }
+    setState({ pending: await countPending(userId) })
   } catch {
     /* ignore */
   }
@@ -95,9 +104,20 @@ async function doFlush(): Promise<void> {
   setState({ syncing: true, lastError: null })
   let synced = 0
   try {
+    // Who is replaying. Mutations stamped with a *different* user are skipped, never
+    // deleted — on a shared device they must survive until that person signs back in.
+    // Unstamped (legacy) rows are adoptable; see isOwnedBy.
+    let currentUserId: string | undefined
+    try {
+      currentUserId = (await supabase.auth.getSession()).data.session?.user?.id
+    } catch {
+      currentUserId = undefined
+    }
+
     const pending = await getAllPending()
     for (const m of pending) {
       try {
+        if (!isOwnedBy(m, currentUserId)) continue
         // A direct online write may have superseded (deleted) this entry since we read
         // the snapshot — re-check so we never replay a stale label over a newer one.
         if (m.id != null && !(await getPendingById(m.id))) continue

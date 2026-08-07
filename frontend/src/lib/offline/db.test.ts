@@ -123,3 +123,22 @@ describe('pending mutations', () => {
     expect((await db.getPendingByIon('d1', 'i2')).map((p) => p.type)).toEqual(['annotate']) // other ion untouched
   })
 })
+
+describe('isOwnedBy (offline queue ownership policy)', () => {
+  it('adopts legacy rows with no userId', async () => {
+    const db = await import('./db')
+    expect(db.isOwnedBy({ userId: undefined } as never, 'userA')).toBe(true)
+  })
+
+  it('matches the signed-in user', async () => {
+    const db = await import('./db')
+    expect(db.isOwnedBy({ userId: 'userA' } as never, 'userA')).toBe(true)
+    expect(db.isOwnedBy({ userId: 'userB' } as never, 'userA')).toBe(false)
+  })
+
+  it('does not claim an attributed row while signed out', async () => {
+    const db = await import('./db')
+    expect(db.isOwnedBy({ userId: 'userA' } as never, undefined)).toBe(false)
+    expect(db.isOwnedBy({ userId: undefined } as never, undefined)).toBe(true)
+  })
+})

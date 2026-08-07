@@ -14,13 +14,37 @@
  *    older synced annotation may exist, removes it rather than leaving it behind).
  */
 import apiClient from '../apiClient'
+import { supabase } from '../supabaseClient'
 import {
   addPending,
   getOfflineDataset,
   removePendingByIon,
   updateOfflineIon,
+  type PendingMutation,
 } from './db'
 import { refreshPendingCount } from './sync'
+
+/**
+ * Queue an offline mutation, stamped with whoever is signed in right now.
+ *
+ * Every queue site goes through here so the stamp can't be forgotten. Without it, a
+ * shared device replays one person's queued annotations under whoever signs in next,
+ * permanently misattributing them — the queue is flushed on SIGNED_IN, so it does not
+ * even need the same session to still be open.
+ *
+ * A missing id (not signed in, or the session lookup failed) is stored as `undefined`,
+ * which `isOwnedBy` treats as adoptable — preserving today's behaviour rather than
+ * stranding the mutation.
+ */
+async function queuePending(m: Omit<PendingMutation, 'id' | 'userId'>) {
+  let userId: string | undefined
+  try {
+    userId = (await supabase.auth.getSession()).data.session?.user?.id
+  } catch {
+    userId = undefined
+  }
+  return addPending({ ...m, userId })
+}
 
 /** Run a best-effort IndexedDB op; never throw (so it can't break the online network path). */
 async function safe<T>(op: () => Promise<T>): Promise<T | undefined> {
@@ -67,7 +91,7 @@ export async function annotateIon(
 
   // Offline: queue and update the local snapshot optimistically.
   await removePendingByIon(datasetId, ionId, ['annotate', 'unannotate'])
-  await addPending({ datasetId, ionId, type: 'annotate', labelOptionId, labelName, clientTs: Date.now() })
+  await queuePending({ datasetId, ionId, type: 'annotate', labelOptionId, labelName, clientTs: Date.now() })
   await applyLocal()
   void refreshPendingCount()
 }
@@ -95,7 +119,7 @@ export async function unannotateIon(datasetId: string, ionId: string) {
 
   // Offline: queue an unannotate so a prior *synced* annotation is removed on reconnect.
   // (If there was nothing on the server, the replay 404s and is dropped — harmless.)
-  await addPending({ datasetId, ionId, type: 'unannotate', clientTs: Date.now() })
+  await queuePending({ datasetId, ionId, type: 'unannotate', clientTs: Date.now() })
   await clearLocal()
   void refreshPendingCount()
 }
@@ -120,7 +144,7 @@ export async function toggleStarIon(
   }
 
   await removePendingByIon(datasetId, ionId, ['star'])
-  await addPending({ datasetId, ionId, type: 'star', desiredStar: desired, clientTs: Date.now() })
+  await queuePending({ datasetId, ionId, type: 'star', desiredStar: desired, clientTs: Date.now() })
   await applyLocal(desired)
   void refreshPendingCount()
   return desired

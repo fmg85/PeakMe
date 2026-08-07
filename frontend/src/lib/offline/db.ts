@@ -37,6 +37,14 @@ export interface PendingMutation {
   labelName?: string
   desiredStar?: boolean
   clientTs: number
+  /**
+   * Supabase user id of whoever queued this. Optional on purpose: rows written before
+   * this existed have it `undefined`, and those are treated as adoptable by whoever is
+   * signed in (they can only have come from that person on this device). Deliberately
+   * NOT added as an index, so no DB_VERSION bump is required — see the note on
+   * `upgrade` below for why bumping the version is dangerous here.
+   */
+  userId?: string
 }
 
 interface PeakMeDB extends DBSchema {
@@ -61,12 +69,22 @@ let dbPromise: Promise<IDBPDatabase<PeakMeDB>> | null = null
 function getDB() {
   if (!dbPromise) {
     dbPromise = openDB<PeakMeDB>(DB_NAME, DB_VERSION, {
+      // Guarded so this is safe to re-run. `upgrade` fires for EVERY version bump, not
+      // just first install, so the original unconditional createObjectStore calls would
+      // have thrown ConstraintError on every existing client the moment DB_VERSION was
+      // raised — wiping their queued offline annotations. Keep every branch guarded.
       upgrade(db) {
-        db.createObjectStore('offlineDatasets', { keyPath: 'datasetId' })
-        const ions = db.createObjectStore('offlineIons', { keyPath: ['datasetId', 'id'] })
-        ions.createIndex('by-dataset', 'datasetId')
-        const pending = db.createObjectStore('pendingMutations', { keyPath: 'id', autoIncrement: true })
-        pending.createIndex('by-dataset', 'datasetId')
+        if (!db.objectStoreNames.contains('offlineDatasets')) {
+          db.createObjectStore('offlineDatasets', { keyPath: 'datasetId' })
+        }
+        if (!db.objectStoreNames.contains('offlineIons')) {
+          const ions = db.createObjectStore('offlineIons', { keyPath: ['datasetId', 'id'] })
+          ions.createIndex('by-dataset', 'datasetId')
+        }
+        if (!db.objectStoreNames.contains('pendingMutations')) {
+          const pending = db.createObjectStore('pendingMutations', { keyPath: 'id', autoIncrement: true })
+          pending.createIndex('by-dataset', 'datasetId')
+        }
       },
     })
   }
@@ -193,6 +211,20 @@ export async function removePendingByIon(datasetId: string, ionId: string, types
   )
 }
 
-export async function countPending(): Promise<number> {
-  return (await getDB()).count('pendingMutations')
+export async function countPending(userId?: string): Promise<number> {
+  const all = await getAllPending()
+  return all.filter((m) => isOwnedBy(m, userId)).length
+}
+
+/**
+ * True if `m` belongs to `userId` (or is legacy/unattributed and so adoptable).
+ *
+ * Never used to DELETE a mutation — only to decide whether to replay or skip it. A row
+ * stamped with a different user must survive untouched until that user signs back in,
+ * otherwise switching accounts on a shared device destroys their queued annotations.
+ */
+export function isOwnedBy(m: PendingMutation, userId?: string): boolean {
+  if (m.userId == null) return true   // legacy or pre-auth — adoptable
+  if (userId == null) return false    // signed out: don't claim anyone's rows
+  return m.userId === userId
 }

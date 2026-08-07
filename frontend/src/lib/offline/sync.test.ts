@@ -6,12 +6,18 @@ vi.mock('../apiClient', () => ({ default: { post: vi.fn(), delete: vi.fn() } }))
 vi.mock('../supabaseClient', () => ({
   supabase: { auth: { onAuthStateChange: vi.fn(), getSession: vi.fn() } },
 }))
-vi.mock('./db', () => ({
-  getAllPending: vi.fn(),
-  getPendingById: vi.fn(),
-  deletePending: vi.fn(),
-  countPending: vi.fn(),
-}))
+// isOwnedBy is pure ownership policy — use the REAL implementation so these tests
+// exercise it rather than a stub that would hide a regression in it.
+vi.mock('./db', async () => {
+  const actual = await vi.importActual<typeof import('./db')>('./db')
+  return {
+    getAllPending: vi.fn(),
+    getPendingById: vi.fn(),
+    deletePending: vi.fn(),
+    countPending: vi.fn(),
+    isOwnedBy: actual.isOwnedBy,
+  }
+})
 
 let sync: typeof import('./sync')
 let db: typeof import('./db')
@@ -43,6 +49,8 @@ beforeEach(async () => {
   const api = (await import('../apiClient')).default as any
   post = api.post
   // sensible defaults
+  const { supabase } = await import('../supabaseClient')
+  vi.mocked(supabase.auth.getSession).mockResolvedValue({ data: { session: null } } as any)
   vi.mocked(db.deletePending).mockResolvedValue(undefined as any)
   vi.mocked(db.countPending).mockResolvedValue(0)
   // by default a re-read finds the row (i.e. not superseded)
@@ -227,6 +235,69 @@ describe('unannotate replay (undo must survive a failed flush)', () => {
 
     expect(api.delete).toHaveBeenCalledWith('/api/ions/i1/annotate')
     expect(db.deletePending).toHaveBeenCalledWith(1)
+  })
+})
+
+describe('per-user scoping of the offline queue (multi-user groundwork)', () => {
+  const owned = (id: number, userId?: string): PendingMutation => ({
+    ...annotate(id), userId,
+  })
+  const signedInAs = async (id: string | null) => {
+    const { supabase } = await import('../supabaseClient')
+    vi.mocked(supabase.auth.getSession).mockResolvedValue(
+      { data: { session: id ? { user: { id } } : null } } as any)
+  }
+
+  it('replays only the signed-in user\'s mutations', async () => {
+    await signedInAs('userA')
+    vi.mocked(db.getAllPending).mockResolvedValue([owned(1, 'userA'), owned(2, 'userB')])
+    vi.mocked(db.getPendingById).mockImplementation(async (id) => owned(id, id === 1 ? 'userA' : 'userB'))
+    post.mockResolvedValue({ data: {} })
+
+    await sync.flushPendingMutations()
+
+    expect(post).toHaveBeenCalledTimes(1)
+    expect(post).toHaveBeenCalledWith('/api/ions/i1/annotate', { label_option_id: 'l1' })
+  })
+
+  it('never deletes another user\'s queued mutation', async () => {
+    // The whole point: B's work must survive until B signs back in.
+    await signedInAs('userA')
+    vi.mocked(db.getAllPending).mockResolvedValue([owned(2, 'userB')])
+    vi.mocked(db.getPendingById).mockImplementation(async (id) => owned(id, 'userB'))
+    post.mockResolvedValue({ data: {} })
+
+    await sync.flushPendingMutations()
+
+    expect(post).not.toHaveBeenCalled()
+    expect(db.deletePending).not.toHaveBeenCalled()
+  })
+
+  it('adopts legacy rows that predate user stamping', async () => {
+    // Rows already on disk have userId === undefined and must not be stranded forever.
+    await signedInAs('userA')
+    vi.mocked(db.getAllPending).mockResolvedValue([owned(1, undefined)])
+    vi.mocked(db.getPendingById).mockImplementation(async (id) => owned(id, undefined))
+    post.mockResolvedValue({ data: {} })
+
+    await sync.flushPendingMutations()
+
+    expect(post).toHaveBeenCalledTimes(1)
+    expect(db.deletePending).toHaveBeenCalledWith(1)
+  })
+
+  it('does not claim attributed rows while signed out', async () => {
+    await signedInAs(null)
+    vi.mocked(db.getAllPending).mockResolvedValue([owned(1, 'userA'), owned(2, undefined)])
+    vi.mocked(db.getPendingById).mockImplementation(async (id) => owned(id, id === 1 ? 'userA' : undefined))
+    post.mockResolvedValue({ data: {} })
+
+    await sync.flushPendingMutations()
+
+    // Only the unattributed one replays; the attributed one waits for its owner.
+    expect(post).toHaveBeenCalledTimes(1)
+    expect(post).toHaveBeenCalledWith('/api/ions/i2/annotate', { label_option_id: 'l2' })
+    expect(db.deletePending).not.toHaveBeenCalledWith(1)
   })
 })
 
