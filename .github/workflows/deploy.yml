@@ -217,27 +217,55 @@ jobs:
             # to the revision the new code expects. Retries to allow the container to
             # come up (and a slow Supabase free-tier wakeup). Replaces the old static
             # /health curl, which passed even with a broken DB or unmigrated schema.
+            # Capture the body (curl -sf discards it) so we can tell "DB asleep" from
+            # "schema not at head" — they need opposite handling on a no-deploy run.
             check_ready() {
               for i in 1 2 3 4 5 6; do
-                if curl -sf --max-time 15 http://localhost:8000/readiness; then return 0; fi
-                echo "not ready yet (attempt $i)..."; sleep 5
+                code=$(curl -s -o /tmp/peakme_ready.json -w '%{http_code}' --max-time 15 \
+                       http://localhost:8000/readiness || echo 000)
+                if [ "$code" = "200" ]; then cat /tmp/peakme_ready.json; echo; return 0; fi
+                echo "not ready yet (attempt $i, http $code)..."; sleep 5
               done
-              echo "Readiness check failed -- DB unreachable or schema not at head"; return 1
+              echo "Readiness check failed -- last response:"
+              cat /tmp/peakme_ready.json 2>/dev/null; echo
+              return 1
             }
+            schema_stale() { grep -q 'Schema not at head' /tmp/peakme_ready.json 2>/dev/null; }
+
             git fetch origin main
             BEHIND=$(git rev-list HEAD..origin/main --count)
             if [ "$BEHIND" -gt 0 ]; then
               echo "EC2 is $BEHIND commit(s) behind — deploying..."
               git pull origin main
               docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
-              docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T api alembic upgrade head
               docker image prune -f
-              check_ready  # fatal — we just deployed; must be serving healthily
+              DEPLOYED=1
             else
               echo "EC2 is up to date ($(git rev-parse --short HEAD)) — skipping rebuild"
-              # No deploy happened. Readiness also pings the DB (SELECT 1), which is a
-              # secondary Supabase keepalive — the primary one is the API's own lifespan
-              # task, which does not depend on this workflow being enabled (ADR-015).
-              # Non-fatal here so a slow free-tier wakeup doesn't fail the catch-up run.
-              check_ready || echo "readiness slow or failed (non-fatal on a no-deploy run)"
+              DEPLOYED=0
+            fi
+
+            # Always converge the schema, on BOTH branches. At head this is a no-op, so
+            # it costs a no-deploy run nothing — but it means a previous half-deploy (new
+            # code up, migration failed) heals on the next run. Previously the migration
+            # lived inside the deploy branch, so once EC2 was at origin/main the retry
+            # took the BEHIND=0 path, skipped the migration, and left prod latched on new
+            # code + old schema indefinitely.
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T api alembic upgrade head
+
+            if [ "$DEPLOYED" = "1" ]; then
+              check_ready  # fatal — we just deployed; it must be serving healthily
+            else
+              # No deploy happened. A slow Supabase free-tier wakeup must NOT fail the
+              # nightly run (it would go red routinely, get muted, and hide real
+              # failures) — but an un-migrated schema is a genuine broken-prod signal and
+              # is always fatal. Readiness also pings the DB, a secondary keepalive; the
+              # primary is the API's own lifespan task (ADR-015).
+              if ! check_ready; then
+                if schema_stale; then
+                  echo "FATAL: prod is serving with a schema that is not at head."
+                  exit 1
+                fi
+                echo "readiness slow or failed (non-fatal on a no-deploy run)"
+              fi
             fi
